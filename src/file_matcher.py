@@ -347,7 +347,7 @@ class FileMatcher:
         return ', '.join(season_summaries) if season_summaries else f"{len(episodes)}个视频"
 
     def _format_episode_range(self, episode_numbers: list) -> str:
-        """格式化集数范围，智能处理断集情况"""
+        """格式化集数范围，智能分组显示连续片段"""
         if not episode_numbers:
             return ""
         
@@ -356,26 +356,39 @@ class FileMatcher:
         if len(episode_numbers) == 1:
             return f"E{episode_numbers[0]:02d}"
         
-        # 检查是否是连续的集数
-        is_continuous = True
+        # 检查是否完全连续
+        is_fully_continuous = True
         for i in range(1, len(episode_numbers)):
             if episode_numbers[i] != episode_numbers[i-1] + 1:
-                is_continuous = False
+                is_fully_continuous = False
                 break
         
-        if is_continuous:
-            # 连续集数，使用范围格式
+        if is_fully_continuous:
+            # 完全连续，使用范围格式
             return f"E{episode_numbers[0]:02d}-E{episode_numbers[-1]:02d}"
         else:
-            # 有断集，检查断集的情况
-            min_ep = episode_numbers[0]
-            max_ep = episode_numbers[-1]
-            total_count = len(episode_numbers)
+            # 有断集，分组显示连续片段
+            groups = []
+            start = episode_numbers[0]
+            end = episode_numbers[0]
             
-            if total_count <= 3:
-                # 集数较少，直接列出所有集数
-                episode_list = [f"E{ep:02d}" for ep in episode_numbers]
-                return "+".join(episode_list)
+            for i in range(1, len(episode_numbers)):
+                if episode_numbers[i] == end + 1:
+                    # 连续，扩展当前组
+                    end = episode_numbers[i]
+                else:
+                    # 不连续，结束当前组，开始新组
+                    if start == end:
+                        groups.append(f"E{start:02d}")
+                    else:
+                        groups.append(f"E{start:02d}-E{end:02d}")
+                    start = episode_numbers[i]
+                    end = episode_numbers[i]
+            
+            # 添加最后一组
+            if start == end:
+                groups.append(f"E{start:02d}")
             else:
-                # 集数较多但有断集，显示范围和实际数量
-                return f"E{min_ep:02d}-E{max_ep:02d}({total_count}集)"
+                groups.append(f"E{start:02d}-E{end:02d}")
+            
+            return ",".join(groups)

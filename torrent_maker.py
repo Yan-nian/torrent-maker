@@ -331,9 +331,13 @@ class FileMatcher:
         return result
 
     def is_video_file(self, filename: str) -> bool:
-        """判断是否为视频文件"""
-        video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.m4v', '.ts', '.m2ts'}
-        return any(filename.lower().endswith(ext) for ext in video_extensions)
+        """检查文件是否为视频文件"""
+        video_extensions = {
+            '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', 
+            '.webm', '.m4v', '.3gp', '.ogv', '.ts', '.m2ts'
+        }
+        _, ext = os.path.splitext(filename.lower())
+        return ext in video_extensions
 
     def extract_episode_info_simple(self, folder_path: str) -> Dict[str, Any]:
         """简单的剧集信息提取"""
@@ -368,20 +372,22 @@ class FileMatcher:
             'total_episodes': len(episodes)
         }
 
-    def parse_episode_from_filename(self, filename: str) -> Dict[str, Any]:
-        """从文件名解析剧集信息"""
+    def parse_episode_from_filename(self, filename: str) -> dict:
+        """从文件名中解析剧集信息"""
         import re
         
         # 常见的剧集命名模式
         patterns = [
-            # Season Episode 格式: S01E01, S1E1, s01e01
+            # S01E01, S1E1, s01e01
             (r'[Ss](\d{1,2})[Ee](\d{1,3})', 'season_episode'),
-            # 单独 Episode 格式: E01, EP01, ep01
-            (r'(?:^|[^a-zA-Z])[Ee][Pp]?(\d{1,3})(?:[^0-9]|$)', 'episode_only'),
-            # 数字格式: 101, 1001 (第一个数字是季，后面是集)
-            (r'(?:^|[^0-9])(\d)(\d{2})(?:[^0-9]|$)', 'season_episode_concat'),
-            # 纯数字格式: 01, 02 等
-            (r'(?:^|[^0-9])(\d{1,3})(?:[^0-9]|$)', 'episode_only'),
+            # Season 1 Episode 01
+            (r'[Ss]eason\s*(\d{1,2})\s*[Ee]pisode\s*(\d{1,3})', 'season_episode'),
+            # 第一季第01集
+            (r'第(\d{1,2})季第(\d{1,3})集', 'season_episode'),
+            # 1x01, 01x01
+            (r'(\d{1,2})x(\d{1,3})', 'season_episode'),
+            # EP01, Ep.01, 第01集
+            (r'(?:[Ee][Pp]\.?\s*(\d{1,3})|第(\d{1,3})集)', 'episode_only'),
         ]
         
         for pattern, pattern_type in patterns:
@@ -396,17 +402,8 @@ class FileMatcher:
                         'filename': filename,
                         'pattern_type': pattern_type
                     }
-                elif pattern_type == 'season_episode_concat':
-                    season = int(match.group(1))
-                    episode = int(match.group(2))
-                    return {
-                        'season': season,
-                        'episode': episode,
-                        'filename': filename,
-                        'pattern_type': pattern_type
-                    }
                 elif pattern_type == 'episode_only':
-                    episode = int(match.group(1))
+                    episode = int(match.group(1) or match.group(2))
                     return {
                         'season': None,
                         'episode': episode,
@@ -444,7 +441,7 @@ class FileMatcher:
         return ', '.join(season_summaries) if season_summaries else f"{len(episodes)}个视频"
 
     def _format_episode_range(self, episode_numbers: list) -> str:
-        """格式化集数范围，智能处理断集情况"""
+        """格式化集数范围，智能分组显示连续片段"""
         if not episode_numbers:
             return ""
         
@@ -453,29 +450,42 @@ class FileMatcher:
         if len(episode_numbers) == 1:
             return f"E{episode_numbers[0]:02d}"
         
-        # 检查是否是连续的集数
-        is_continuous = True
+        # 检查是否完全连续
+        is_fully_continuous = True
         for i in range(1, len(episode_numbers)):
             if episode_numbers[i] != episode_numbers[i-1] + 1:
-                is_continuous = False
+                is_fully_continuous = False
                 break
         
-        if is_continuous:
-            # 连续集数，使用范围格式
+        if is_fully_continuous:
+            # 完全连续，使用范围格式
             return f"E{episode_numbers[0]:02d}-E{episode_numbers[-1]:02d}"
         else:
-            # 有断集，检查断集的情况
-            min_ep = episode_numbers[0]
-            max_ep = episode_numbers[-1]
-            total_count = len(episode_numbers)
+            # 有断集，分组显示连续片段
+            groups = []
+            start = episode_numbers[0]
+            end = episode_numbers[0]
             
-            if total_count <= 3:
-                # 集数较少，直接列出所有集数
-                episode_list = [f"E{ep:02d}" for ep in episode_numbers]
-                return "+".join(episode_list)
+            for i in range(1, len(episode_numbers)):
+                if episode_numbers[i] == end + 1:
+                    # 连续，扩展当前组
+                    end = episode_numbers[i]
+                else:
+                    # 不连续，结束当前组，开始新组
+                    if start == end:
+                        groups.append(f"E{start:02d}")
+                    else:
+                        groups.append(f"E{start:02d}-E{end:02d}")
+                    start = episode_numbers[i]
+                    end = episode_numbers[i]
+            
+            # 添加最后一组
+            if start == end:
+                groups.append(f"E{start:02d}")
             else:
-                # 集数较多但有断集，显示范围和实际数量
-                return f"E{min_ep:02d}-E{max_ep:02d}({total_count}集)"
+                groups.append(f"E{start:02d}-E{end:02d}")
+            
+            return ",".join(groups)
 
     def get_folder_episodes_detail(self, folder_path: str) -> str:
         """获取文件夹剧集详细信息"""
