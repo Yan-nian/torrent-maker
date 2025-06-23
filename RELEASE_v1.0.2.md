@@ -47,8 +47,6 @@
 curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/install_standalone.sh | bash
 ```
 
-> **注意**: 当前使用直接下载模式，GitHub Release正在创建中
-
 ### 方式二：手动下载单文件
 ```bash
 # 下载单文件版本
