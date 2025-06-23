@@ -122,9 +122,7 @@ sudo yum install mktorrent
 在 "Attach binaries by dropping them here or selecting them." 区域，拖入以下文件：
 
 - `release/torrent-maker-standalone.tar.gz`
-- `release/torrent-maker-standalone.zip`
 - `release/torrent-maker-full.tar.gz`
-- `release/torrent-maker-full.zip`
 
 ### 4. 发布选项
 

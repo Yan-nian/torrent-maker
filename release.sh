@@ -42,12 +42,10 @@ cd "$RELEASE_DIR"
 # 单文件版本压缩包
 echo "压缩单文件版本..."
 tar -czf torrent-maker-standalone.tar.gz standalone/
-zip -r torrent-maker-standalone.zip standalone/
 
 # 完整版本压缩包
 echo "压缩完整版本..."
 tar -czf torrent-maker-full.tar.gz full/
-zip -r torrent-maker-full.zip full/
 
 cd ..
 
@@ -55,25 +53,23 @@ cd ..
 echo ""
 echo "📊 发布包信息:"
 echo "=============="
-ls -lh "$RELEASE_DIR"/*.tar.gz "$RELEASE_DIR"/*.zip
+ls -lh "$RELEASE_DIR"/*.tar.gz
 
 echo ""
 echo "✅ 发布包准备完成！"
 echo ""
 echo "📁 发布目录: $RELEASE_DIR/"
 echo "   ├── 📦 torrent-maker-standalone.tar.gz  (单文件版本)"
-echo "   ├── 📦 torrent-maker-standalone.zip"
-echo "   ├── 📦 torrent-maker-full.tar.gz        (完整版本)"
-echo "   └── 📦 torrent-maker-full.zip"
+echo "   └── 📦 torrent-maker-full.tar.gz        (完整版本)"
 echo ""
 echo "🌐 使用建议:"
-echo "   - 普通用户推荐下载: torrent-maker-standalone.*"
-echo "   - 开发者推荐下载: torrent-maker-full.*"
+echo "   - 普通用户推荐下载: torrent-maker-standalone.tar.gz"
+echo "   - 开发者推荐下载: torrent-maker-full.tar.gz"
 echo ""
 echo "📋 单文件版本使用方法:"
-echo "   1. 下载并解压 torrent-maker-standalone.*"
+echo "   1. 下载并解压 torrent-maker-standalone.tar.gz"
 echo "   2. 运行: python3 torrent_maker.py"
 echo ""
 echo "📋 完整版本使用方法:"
-echo "   1. 下载并解压 torrent-maker-full.*"
+echo "   1. 下载并解压 torrent-maker-full.tar.gz"
 echo "   2. 运行: ./install.sh && python3 run.py"
