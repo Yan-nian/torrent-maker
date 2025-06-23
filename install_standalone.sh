@@ -12,11 +12,47 @@ CONFIG_DIR="$HOME/.torrent_maker"
 SCRIPT_NAME="torrent_maker.py"
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/torrent-maker-standalone.tar.gz"
 
-echo "🎬 Torrent Maker 单文件版本安装器"
-echo "=================================="
-echo "版本: $VERSION"
-echo "仓库: https://github.com/$REPO"
-echo ""
+# 解析命令行参数
+FORCE_INSTALL=false
+QUIET_MODE=false
+
+for arg in "$@"; do
+    case $arg in
+        --force)
+            FORCE_INSTALL=true
+            shift
+            ;;
+        --quiet)
+            QUIET_MODE=true
+            shift
+            ;;
+        --help)
+            echo "Torrent Maker 安装脚本"
+            echo ""
+            echo "用法: bash install_standalone.sh [选项]"
+            echo ""
+            echo "选项:"
+            echo "  --force   强制重新安装，即使已是最新版本"
+            echo "  --quiet   静默模式，减少输出信息"
+            echo "  --help    显示此帮助信息"
+            echo ""
+            echo "示例:"
+            echo "  curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/install_standalone.sh | bash"
+            echo "  curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/install_standalone.sh | bash -s -- --force"
+            exit 0
+            ;;
+        *)
+            ;;
+    esac
+done
+
+if [ "$QUIET_MODE" = false ]; then
+    echo "🎬 Torrent Maker 单文件版本安装器"
+    echo "=================================="
+    echo "版本: $VERSION"
+    echo "仓库: https://github.com/$REPO"
+    echo ""
+fi
 
 # 颜色定义
 RED='\033[0;31m'
@@ -26,10 +62,22 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # 打印彩色消息
-print_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
-print_success() { echo -e "${GREEN}✅ $1${NC}"; }
-print_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
-print_error() { echo -e "${RED}❌ $1${NC}"; }
+print_info() { 
+    if [ "$QUIET_MODE" = false ]; then
+        echo -e "${BLUE}ℹ️  $1${NC}"
+    fi
+}
+print_success() { 
+    if [ "$QUIET_MODE" = false ]; then
+        echo -e "${GREEN}✅ $1${NC}"
+    fi
+}
+print_warning() { 
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+print_error() { 
+    echo -e "${RED}❌ $1${NC}"
+}
 
 # 检查命令是否存在
 command_exists() {
@@ -160,17 +208,26 @@ check_existing_installation() {
             print_info "已安装版本: $installed_version"
             
             if [ "$installed_version" = "$VERSION" ]; then
-                print_success "已是最新版本 ($VERSION)"
-                echo ""
-                echo "如需重新安装，请删除以下文件："
-                echo "  rm $INSTALL_DIR/$SCRIPT_NAME"
-                echo "  rm -rf $CONFIG_DIR"
-                echo ""
-                read -p "是否继续重新安装？(y/N): " -n 1 -r
-                echo
-                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                    print_info "安装取消"
-                    exit 0
+                if [ "$FORCE_INSTALL" = true ]; then
+                    print_warning "强制重新安装模式，将覆盖现有安装"
+                else
+                    print_success "已是最新版本 ($VERSION)"
+                    echo ""
+                    echo "💡 选项："
+                    echo "  1. 直接使用: python3 $INSTALL_DIR/$SCRIPT_NAME"
+                    echo "  2. 强制重新安装: bash <(curl -fsSL https://raw.githubusercontent.com/$REPO/main/install_standalone.sh) --force"
+                    echo "  3. 手动删除后重装:"
+                    echo "     rm $INSTALL_DIR/$SCRIPT_NAME"
+                    echo "     rm -rf $CONFIG_DIR"
+                    echo ""
+                    read -p "🤔 是否继续重新安装？(y/N): " -n 1 -r
+                    echo
+                    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                        print_info "安装取消"
+                        echo ""
+                        echo "🚀 开始使用: python3 $INSTALL_DIR/$SCRIPT_NAME"
+                        exit 0
+                    fi
                 fi
             else
                 print_warning "发现旧版本 ($installed_version)，将更新到 $VERSION"
@@ -302,32 +359,38 @@ verify_installation() {
 
 # 显示使用说明
 show_usage() {
-    echo ""
-    echo "🎉 安装成功！"
-    echo "=================================="
-    echo ""
-    echo "📋 使用方法："
-    echo "  方式1: python3 $INSTALL_DIR/$SCRIPT_NAME"
-    if [[ ":$PATH:" == *":$INSTALL_DIR:"* ]]; then
-        echo "  方式2: $SCRIPT_NAME"
+    if [ "$QUIET_MODE" = false ]; then
+        echo ""
+        echo "🎉 安装成功！"
+        echo "=================================="
+        echo ""
+        echo "📋 使用方法："
+        echo "  方式1: python3 $INSTALL_DIR/$SCRIPT_NAME"
+        if [[ ":$PATH:" == *":$INSTALL_DIR:"* ]]; then
+            echo "  方式2: $SCRIPT_NAME"
+        fi
+        echo ""
+        echo "📁 配置目录: $CONFIG_DIR"
+        echo "📄 程序位置: $INSTALL_DIR/$SCRIPT_NAME"
+        echo ""
+        echo "✨ 特性："
+        echo "  - 🔍 智能模糊搜索"
+        echo "  - 🎬 剧集信息解析"
+        echo "  - 🌐 Tracker 管理"
+        echo "  - 📁 自定义路径配置"
+        echo ""
+        echo "🔄 更新/重装方法："
+        echo "  普通安装: curl -fsSL https://raw.githubusercontent.com/$REPO/main/install_standalone.sh | bash"
+        echo "  强制重装: curl -fsSL https://raw.githubusercontent.com/$REPO/main/install_standalone.sh | bash -s -- --force"
+        echo "  静默安装: curl -fsSL https://raw.githubusercontent.com/$REPO/main/install_standalone.sh | bash -s -- --quiet"
+        echo ""
+        echo "🐛 问题反馈："
+        echo "  https://github.com/$REPO/issues"
+        echo ""
+        echo "现在可以开始使用了！🚀"
+    else
+        echo "✅ 安装完成: $INSTALL_DIR/$SCRIPT_NAME"
     fi
-    echo ""
-    echo "📁 配置目录: $CONFIG_DIR"
-    echo "📄 程序位置: $INSTALL_DIR/$SCRIPT_NAME"
-    echo ""
-    echo "✨ 特性："
-    echo "  - 🔍 智能模糊搜索"
-    echo "  - 🎬 剧集信息解析"
-    echo "  - 🌐 Tracker 管理"
-    echo "  - 📁 自定义路径配置"
-    echo ""
-    echo "🔄 更新方法："
-    echo "  curl -fsSL https://raw.githubusercontent.com/$REPO/main/install_standalone.sh | bash"
-    echo ""
-    echo "🐛 问题反馈："
-    echo "  https://github.com/$REPO/issues"
-    echo ""
-    echo "现在可以开始使用了！🚀"
 }
 
 # 主函数
