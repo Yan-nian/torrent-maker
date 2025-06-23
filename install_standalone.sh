@@ -1,103 +1,348 @@
 #!/bin/bash
 
-# Torrent Maker 单文件版本安装脚本
-# 适用于 macOS 和 Linux 系统
+# Torrent Maker 单文件版本智能安装/更新脚本
+# 支持 macOS 和 Linux 系统，支持自动更新
 
-echo "🎬 Torrent Maker 单文件版本安装"
-echo "================================"
+set -e  # 遇到错误时退出
+
+VERSION="v1.0.1"  # 当前版本
+REPO="Yan-nian/torrent-maker"
+INSTALL_DIR="$HOME/.local/bin"
+CONFIG_DIR="$HOME/.torrent_maker"
+SCRIPT_NAME="torrent_maker.py"
+DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/torrent-maker-standalone.tar.gz"
+
+echo "🎬 Torrent Maker 单文件版本安装器"
+echo "=================================="
+echo "版本: $VERSION"
+echo "仓库: https://github.com/$REPO"
+echo ""
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# 打印彩色消息
+print_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
+print_success() { echo -e "${GREEN}✅ $1${NC}"; }
+print_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
+print_error() { echo -e "${RED}❌ $1${NC}"; }
+
+# 检查命令是否存在
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
 
 # 检查 Python 版本
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 未安装，请先安装 Python 3.7 或更高版本"
-    exit 1
-fi
-
-python_version=$(python3 -c "import sys; print('.'.join(map(str, sys.version_info[:2])))")
-echo "📍 检测到 Python 版本: $python_version"
-
-if python3 -c "import sys; exit(0 if sys.version_info >= (3, 7) else 1)"; then
-    echo "✅ Python 版本符合要求 (>= 3.7)"
-else
-    echo "❌ Python 版本过低，需要 Python 3.7 或更高版本"
-    exit 1
-fi
-
-# 检查操作系统并安装 mktorrent
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
-    echo "📱 检测到 macOS 系统"
+check_python() {
+    print_info "检查 Python 环境..."
     
-    if ! command -v brew &> /dev/null; then
-        echo "❌ Homebrew 未安装，请先安装 Homebrew: https://brew.sh/"
+    if ! command_exists python3; then
+        print_error "Python 3 未安装，请先安装 Python 3.7 或更高版本"
+        echo "安装指南："
+        echo "  macOS: brew install python3"
+        echo "  Ubuntu: sudo apt install python3"
+        echo "  CentOS: sudo yum install python3"
+        exit 1
+    fi
+
+    python_version=$(python3 -c "import sys; print('.'.join(map(str, sys.version_info[:2])))")
+    print_success "检测到 Python 版本: $python_version"
+
+    if python3 -c "import sys; exit(0 if sys.version_info >= (3, 7) else 1)"; then
+        print_success "Python 版本符合要求 (>= 3.7)"
+    else
+        print_error "Python 版本过低，需要 Python 3.7 或更高版本"
+        exit 1
+    fi
+}
+
+# 检查并安装 mktorrent
+check_mktorrent() {
+    print_info "检查 mktorrent..."
+    
+    if command_exists mktorrent; then
+        mktorrent_version=$(mktorrent -h 2>&1 | head -n 1 | grep -o '[0-9]\+\.[0-9]\+' || echo "未知版本")
+        print_success "mktorrent 已安装 (版本: $mktorrent_version)"
+        return 0
+    fi
+    
+    print_warning "mktorrent 未安装，正在尝试自动安装..."
+    
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        print_info "检测到 macOS 系统"
+        
+        if command_exists brew; then
+            print_info "使用 Homebrew 安装 mktorrent..."
+            brew install mktorrent
+        else
+            print_error "需要 Homebrew 来安装 mktorrent"
+            echo "请先安装 Homebrew: https://brew.sh/"
+            echo "然后运行: brew install mktorrent"
+            exit 1
+        fi
+        
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        # Linux
+        print_info "检测到 Linux 系统"
+        
+        if command_exists apt-get; then
+            print_info "使用 apt 安装 mktorrent..."
+            sudo apt-get update && sudo apt-get install -y mktorrent
+        elif command_exists yum; then
+            print_info "使用 yum 安装 mktorrent..."
+            sudo yum install -y mktorrent
+        elif command_exists dnf; then
+            print_info "使用 dnf 安装 mktorrent..."
+            sudo dnf install -y mktorrent
+        elif command_exists pacman; then
+            print_info "使用 pacman 安装 mktorrent..."
+            sudo pacman -S --noconfirm mktorrent
+        else
+            print_error "未找到支持的包管理器"
+            echo "请手动安装 mktorrent："
+            echo "  Debian/Ubuntu: sudo apt install mktorrent"
+            echo "  CentOS/RHEL: sudo yum install mktorrent"
+            echo "  Fedora: sudo dnf install mktorrent"
+            echo "  Arch: sudo pacman -S mktorrent"
+            exit 1
+        fi
+    else
+        print_error "不支持的操作系统: $OSTYPE"
+        echo "请手动安装 mktorrent 工具"
         exit 1
     fi
     
-    if ! command -v mktorrent &> /dev/null; then
-        echo "📦 正在安装 mktorrent..."
-        brew install mktorrent
+    # 验证安装
+    if command_exists mktorrent; then
+        mktorrent_version=$(mktorrent -h 2>&1 | head -n 1 | grep -o '[0-9]\+\.[0-9]\+' || echo "未知版本")
+        print_success "mktorrent 安装成功 (版本: $mktorrent_version)"
     else
-        echo "✅ mktorrent 已安装"
-    fi
-    
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    # Linux
-    echo "🐧 检测到 Linux 系统"
-    
-    if command -v apt-get &> /dev/null; then
-        echo "📦 使用 apt-get 安装 mktorrent..."
-        sudo apt-get update
-        sudo apt-get install -y mktorrent
-    elif command -v yum &> /dev/null; then
-        echo "📦 使用 yum 安装 mktorrent..."
-        sudo yum install -y mktorrent
-    elif command -v dnf &> /dev/null; then
-        echo "📦 使用 dnf 安装 mktorrent..."
-        sudo dnf install -y mktorrent
-    else
-        echo "❌ 未找到支持的包管理器，请手动安装 mktorrent"
+        print_error "mktorrent 安装失败"
         exit 1
     fi
-else
-    echo "❌ 不支持的操作系统: $OSTYPE"
-    echo "请手动安装 mktorrent 工具"
-    exit 1
-fi
+}
 
-# 验证 mktorrent 安装
-if command -v mktorrent &> /dev/null; then
-    mktorrent_version=$(mktorrent -h 2>&1 | head -n 1)
-    echo "✅ mktorrent 安装成功: $mktorrent_version"
-else
-    echo "❌ mktorrent 安装失败"
-    exit 1
-fi
+# 检查网络连接
+check_network() {
+    print_info "检查网络连接..."
+    if command_exists curl; then
+        if curl -s --head https://github.com >/dev/null; then
+            print_success "网络连接正常"
+        else
+            print_error "无法连接到 GitHub，请检查网络"
+            exit 1
+        fi
+    elif command_exists wget; then
+        if wget -q --spider https://github.com; then
+            print_success "网络连接正常"
+        else
+            print_error "无法连接到 GitHub，请检查网络"
+            exit 1
+        fi
+    else
+        print_warning "未找到 curl 或 wget，跳过网络检查"
+    fi
+}
 
-# 下载单文件版本（如果不存在）
-if [ ! -f "torrent_maker.py" ]; then
-    echo "📥 正在下载 torrent_maker.py..."
-    # 这里可以添加下载链接，目前假设文件已存在
-    echo "⚠️  请确保 torrent_maker.py 文件在当前目录"
-fi
+# 检查是否已安装
+check_existing_installation() {
+    if [ -f "$INSTALL_DIR/$SCRIPT_NAME" ]; then
+        print_info "检测到已安装的版本"
+        
+        # 检查版本
+        if [ -f "$CONFIG_DIR/version" ]; then
+            installed_version=$(cat "$CONFIG_DIR/version")
+            print_info "已安装版本: $installed_version"
+            
+            if [ "$installed_version" = "$VERSION" ]; then
+                print_success "已是最新版本 ($VERSION)"
+                echo ""
+                echo "如需重新安装，请删除以下文件："
+                echo "  rm $INSTALL_DIR/$SCRIPT_NAME"
+                echo "  rm -rf $CONFIG_DIR"
+                echo ""
+                read -p "是否继续重新安装？(y/N): " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    print_info "安装取消"
+                    exit 0
+                fi
+            else
+                print_warning "发现旧版本 ($installed_version)，将更新到 $VERSION"
+            fi
+        else
+            print_warning "版本信息缺失，将重新安装"
+        fi
+    fi
+}
 
-# 设置执行权限
-if [ -f "torrent_maker.py" ]; then
-    chmod +x torrent_maker.py
-    echo "✅ 权限设置完成"
-else
-    echo "❌ 未找到 torrent_maker.py 文件"
-    exit 1
-fi
+# 创建安装目录
+create_directories() {
+    print_info "创建目录..."
+    
+    mkdir -p "$INSTALL_DIR"
+    mkdir -p "$CONFIG_DIR"
+    
+    print_success "目录创建完成"
+}
 
-echo ""
-echo "🎉 安装完成！"
-echo "================================"
-echo "使用方法："
-echo "  python3 torrent_maker.py"
-echo ""
-echo "单文件版本优势："
-echo "- 📦 无需安装依赖包"
-echo "- 🚀 一个文件包含所有功能"
-echo "- 💾 配置文件自动保存到 ~/.torrent_maker/"
-echo "- 🔧 首次运行会自动创建配置"
-echo ""
-echo "开始使用吧！🎬"
+# 下载并安装
+download_and_install() {
+    print_info "下载 Torrent Maker..."
+    
+    temp_dir=$(mktemp -d)
+    cd "$temp_dir"
+    
+    # 下载发布包
+    if command_exists curl; then
+        curl -L "$DOWNLOAD_URL" -o torrent-maker-standalone.tar.gz
+    elif command_exists wget; then
+        wget "$DOWNLOAD_URL" -O torrent-maker-standalone.tar.gz
+    else
+        print_error "需要 curl 或 wget 来下载文件"
+        exit 1
+    fi
+    
+    print_success "下载完成"
+    
+    # 解压
+    print_info "解压文件..."
+    tar -xzf torrent-maker-standalone.tar.gz
+    
+    # 安装
+    print_info "安装到 $INSTALL_DIR..."
+    cp standalone/torrent_maker.py "$INSTALL_DIR/"
+    chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
+    
+    # 保存版本信息
+    echo "$VERSION" > "$CONFIG_DIR/version"
+    
+    # 清理临时文件
+    cd - >/dev/null
+    rm -rf "$temp_dir"
+    
+    print_success "安装完成"
+}
+
+# 设置 PATH
+setup_path() {
+    print_info "配置环境变量..."
+    
+    # 检查 PATH 中是否包含安装目录
+    if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+        print_warning "$INSTALL_DIR 不在 PATH 中"
+        
+        # 添加到 shell 配置文件
+        shell_config=""
+        if [ -n "$BASH_VERSION" ]; then
+            shell_config="$HOME/.bashrc"
+        elif [ -n "$ZSH_VERSION" ]; then
+            shell_config="$HOME/.zshrc"
+        else
+            shell_config="$HOME/.profile"
+        fi
+        
+        echo "" >> "$shell_config"
+        echo "# Torrent Maker" >> "$shell_config"
+        echo "export PATH=\"\$PATH:$INSTALL_DIR\"" >> "$shell_config"
+        
+        print_success "已添加到 $shell_config"
+        print_warning "请运行 'source $shell_config' 或重新打开终端"
+    else
+        print_success "PATH 配置正确"
+    fi
+}
+
+# 创建桌面快捷方式（可选）
+create_shortcut() {
+    if [[ "$OSTYPE" == "linux-gnu"* ]] && [ -d "$HOME/Desktop" ]; then
+        read -p "是否创建桌面快捷方式？(y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            cat > "$HOME/Desktop/torrent-maker.desktop" << EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Torrent Maker
+Comment=半自动化种子制作工具
+Exec=python3 $INSTALL_DIR/$SCRIPT_NAME
+Icon=folder-downloads
+Terminal=true
+Categories=Utility;FileTools;
+EOF
+            chmod +x "$HOME/Desktop/torrent-maker.desktop"
+            print_success "桌面快捷方式创建完成"
+        fi
+    fi
+}
+
+# 验证安装
+verify_installation() {
+    print_info "验证安装..."
+    
+    if [ -f "$INSTALL_DIR/$SCRIPT_NAME" ] && [ -x "$INSTALL_DIR/$SCRIPT_NAME" ]; then
+        print_success "文件安装正确"
+    else
+        print_error "安装验证失败"
+        exit 1
+    fi
+    
+    if python3 -c "import os, sys, json, re, difflib, subprocess" 2>/dev/null; then
+        print_success "Python 依赖检查通过"
+    else
+        print_error "Python 依赖检查失败"
+        exit 1
+    fi
+}
+
+# 显示使用说明
+show_usage() {
+    echo ""
+    echo "🎉 安装成功！"
+    echo "=================================="
+    echo ""
+    echo "📋 使用方法："
+    echo "  方式1: python3 $INSTALL_DIR/$SCRIPT_NAME"
+    if [[ ":$PATH:" == *":$INSTALL_DIR:"* ]]; then
+        echo "  方式2: $SCRIPT_NAME"
+    fi
+    echo ""
+    echo "📁 配置目录: $CONFIG_DIR"
+    echo "📄 程序位置: $INSTALL_DIR/$SCRIPT_NAME"
+    echo ""
+    echo "✨ 特性："
+    echo "  - 🔍 智能模糊搜索"
+    echo "  - 🎬 剧集信息解析"
+    echo "  - 🌐 Tracker 管理"
+    echo "  - 📁 自定义路径配置"
+    echo ""
+    echo "🔄 更新方法："
+    echo "  curl -fsSL https://raw.githubusercontent.com/$REPO/main/install_standalone.sh | bash"
+    echo ""
+    echo "🐛 问题反馈："
+    echo "  https://github.com/$REPO/issues"
+    echo ""
+    echo "现在可以开始使用了！🚀"
+}
+
+# 主函数
+main() {
+    check_python
+    check_mktorrent
+    check_network
+    check_existing_installation
+    create_directories
+    download_and_install
+    setup_path
+    create_shortcut
+    verify_installation
+    show_usage
+}
+
+# 运行主函数
+main "$@"
