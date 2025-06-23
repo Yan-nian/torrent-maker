@@ -32,7 +32,7 @@
 
 ```bash
 # 下载单文件版本
-wget https://github.com/your-username/torrent-maker/releases/download/v1.0.0/torrent-maker-standalone.tar.gz
+wget https://github.com/Yan-nian/torrent-maker/releases/download/v1.0.0/torrent-maker-standalone.tar.gz
 
 # 解压并运行
 tar -xzf torrent-maker-standalone.tar.gz
@@ -43,14 +43,14 @@ python3 torrent_maker.py
 或者使用一键安装脚本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-username/torrent-maker/main/install_standalone.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/install_standalone.sh | bash
 ```
 
 ### 🔧 完整版本（推荐开发者）
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/torrent-maker.git
+git clone https://github.com/Yan-nian/torrent-maker.git
 cd torrent-maker
 
 # 运行安装脚本
@@ -246,8 +246,8 @@ python test_episode_gaps.py
 
 如有问题或建议，欢迎：
 
-- 提交 [Issue](https://github.com/your-username/torrent-maker/issues)
-- 发起 [Discussion](https://github.com/your-username/torrent-maker/discussions)
+- 提交 [Issue](https://github.com/Yan-nian/torrent-maker/issues)
+- 发起 [Discussion](https://github.com/Yan-nian/torrent-maker/discussions)
 
 ---
 

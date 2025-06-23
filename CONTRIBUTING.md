@@ -5,12 +5,12 @@
 ## 如何贡献
 
 ### 报告 Bug
-1. 查看 [Issues](https://github.com/your-username/torrent-maker/issues) 确认是否已有相同问题
+1. 查看 [Issues](https://github.com/Yan-nian/torrent-maker/issues) 确认是否已有相同问题
 2. 如果没有，请创建新的 Issue，使用 Bug Report 模板
 3. 提供详细的重现步骤和环境信息
 
 ### 提出功能建议
-1. 查看 [Issues](https://github.com/your-username/torrent-maker/issues) 确认是否已有相同建议
+1. 查看 [Issues](https://github.com/Yan-nian/torrent-maker/issues) 确认是否已有相同建议
 2. 如果没有，请创建新的 Issue，使用 Feature Request 模板
 3. 详细描述您的需求和使用场景
 
@@ -19,7 +19,7 @@
 #### 开发环境设置
 ```bash
 # 1. Fork 并克隆仓库
-git clone https://github.com/your-username/torrent-maker.git
+git clone https://github.com/Yan-nian/torrent-maker.git
 cd torrent-maker
 
 # 2. 创建虚拟环境
@@ -112,8 +112,8 @@ torrent-maker/
 ## 疑问？
 
 如果您有任何疑问，请：
-- 查看现有的 [Issues](https://github.com/your-username/torrent-maker/issues)
-- 创建新的 [Discussion](https://github.com/your-username/torrent-maker/discussions)
+- 查看现有的 [Issues](https://github.com/Yan-nian/torrent-maker/issues)
+- 创建新的 [Discussion](https://github.com/Yan-nian/torrent-maker/discussions)
 - 发送邮件给维护者
 
 感谢您的贡献！
