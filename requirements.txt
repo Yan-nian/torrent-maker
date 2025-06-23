@@ -1,0 +1,7 @@
+# 种子制作工具依赖包
+
+# JSON 数据验证
+jsonschema>=4.0.0
+
+# HTTP 请求库（用于验证 tracker）
+requests>=2.25.0

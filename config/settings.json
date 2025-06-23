@@ -1,0 +1,15 @@
+{
+    "resource_folder": "/Users/ershiwushideshuimian/Downloads",
+    "output_folder": "/Users/ershiwushideshuimian/Downloads/pack",
+    "default_piece_size": "auto",
+    "private_torrent": false,
+    "file_search_tolerance": 60,
+    "max_search_results": 10,
+    "auto_create_output_dir": true,
+    "default_trackers": [
+        "udp://tracker.openbittorrent.com:80",
+        "udp://tracker.opentrackr.org:1337/announce",
+        "udp://exodus.desync.com:6969/announce",
+        "udp://tracker.torrent.eu.org:451/announce"
+    ]
+}
