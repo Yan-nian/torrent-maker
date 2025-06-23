@@ -10,8 +10,7 @@ REPO="Yan-nian/torrent-maker"
 INSTALL_DIR="$HOME/.local/bin"
 CONFIG_DIR="$HOME/.torrent_maker"
 SCRIPT_NAME="torrent_maker.py"
-# 临时使用raw文件下载，直到GitHub Release创建完成
-DOWNLOAD_URL="https://raw.githubusercontent.com/$REPO/main/torrent_maker.py"
+RELEASE_URL="https://github.com/$REPO/releases/download/$VERSION/torrent-maker-standalone.tar.gz"
 
 # 解析命令行参数
 FORCE_INSTALL=false
@@ -50,7 +49,7 @@ done
 if [ "$QUIET_MODE" = false ]; then
     echo "🎬 Torrent Maker 单文件版本安装器"
     echo "=================================="
-    echo "版本: $VERSION (安装脚本: v1.0.2-fix)"
+    echo "版本: $VERSION"
     echo "仓库: https://github.com/$REPO"
     echo ""
 fi
@@ -252,22 +251,45 @@ create_directories() {
 # 下载并安装
 download_and_install() {
     print_info "下载 Torrent Maker..."
-    print_info "使用直接下载模式 (v1.0.2-fix)"
+    print_info "下载地址: $RELEASE_URL"
     
-    # 直接下载单文件到安装目录
+    # 下载发布包
+    temp_file="/tmp/torrent-maker-standalone.tar.gz"
     if command_exists curl; then
-        print_info "下载地址: $DOWNLOAD_URL"
-        curl -L "$DOWNLOAD_URL" -o "$INSTALL_DIR/$SCRIPT_NAME"
+        curl -L "$RELEASE_URL" -o "$temp_file"
     elif command_exists wget; then
-        print_info "下载地址: $DOWNLOAD_URL"
-        wget "$DOWNLOAD_URL" -O "$INSTALL_DIR/$SCRIPT_NAME"
+        wget "$RELEASE_URL" -O "$temp_file"
     else
         print_error "需要 curl 或 wget 来下载文件"
         exit 1
     fi
     
     print_success "下载完成"
-    print_info "跳过解压步骤 (直接下载单文件)"
+    print_info "解压文件..."
+    
+    # 解压到临时目录
+    temp_dir="/tmp/torrent-maker-install"
+    rm -rf "$temp_dir"
+    mkdir -p "$temp_dir"
+    
+    if tar -xzf "$temp_file" -C "$temp_dir"; then
+        print_success "解压完成"
+    else
+        print_error "解压失败"
+        exit 1
+    fi
+    
+    # 复制文件到安装目录
+    if [ -f "$temp_dir/$SCRIPT_NAME" ]; then
+        cp "$temp_dir/$SCRIPT_NAME" "$INSTALL_DIR/"
+    else
+        print_error "在解压文件中找不到 $SCRIPT_NAME"
+        exit 1
+    fi
+    
+    # 清理临时文件
+    rm -f "$temp_file"
+    rm -rf "$temp_dir"
     
     # 设置执行权限
     chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
