@@ -282,8 +282,16 @@ download_and_install() {
     # 复制文件到安装目录
     if [ -f "$temp_dir/$SCRIPT_NAME" ]; then
         cp "$temp_dir/$SCRIPT_NAME" "$INSTALL_DIR/"
+    elif [ -f "$temp_dir/standalone/$SCRIPT_NAME" ]; then
+        cp "$temp_dir/standalone/$SCRIPT_NAME" "$INSTALL_DIR/"
     else
         print_error "在解压文件中找不到 $SCRIPT_NAME"
+        print_info "解压文件内容："
+        ls -la "$temp_dir"
+        if [ -d "$temp_dir/standalone" ]; then
+            print_info "standalone 目录内容："
+            ls -la "$temp_dir/standalone"
+        fi
         exit 1
     fi
     
