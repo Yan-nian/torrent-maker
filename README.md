@@ -46,6 +46,14 @@ python3 torrent_maker.py
 curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/install_standalone.sh | bash
 ```
 
+**新版安装脚本特性：**
+- 🔍 自动检查和安装 mktorrent
+- 🔄 支持版本检查和自动更新
+- 🌐 网络连接验证
+- 📁 自动配置 PATH 环境变量
+- 🎨 彩色界面输出
+- 🐧 支持多种 Linux 发行版
+
 ### 🔧 完整版本（推荐开发者）
 
 ```bash
