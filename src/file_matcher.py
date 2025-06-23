@@ -358,12 +358,10 @@ class FileMatcher:
         
         # 检查是否是连续的集数
         is_continuous = True
-        expected = episode_numbers[0]
-        for num in episode_numbers:
-            if num != expected:
+        for i in range(1, len(episode_numbers)):
+            if episode_numbers[i] != episode_numbers[i-1] + 1:
                 is_continuous = False
                 break
-            expected += 1
         
         if is_continuous:
             # 连续集数，使用范围格式
@@ -373,12 +371,8 @@ class FileMatcher:
             min_ep = episode_numbers[0]
             max_ep = episode_numbers[-1]
             total_count = len(episode_numbers)
-            expected_count = max_ep - min_ep + 1
             
-            if total_count == expected_count:
-                # 虽然不是从1开始，但在范围内是连续的
-                return f"E{min_ep:02d}-E{max_ep:02d}"
-            elif total_count <= 3:
+            if total_count <= 3:
                 # 集数较少，直接列出所有集数
                 episode_list = [f"E{ep:02d}" for ep in episode_numbers]
                 return "+".join(episode_list)

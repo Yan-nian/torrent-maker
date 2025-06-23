@@ -90,7 +90,7 @@ class TorrentMakerApp:
             print(f"     💾 大小: {folder_info['size']}")
             # 显示剧集信息
             if folder_info.get('episodes') and folder_info.get('video_count', 0) > 0:
-                print(f"     🎬 剧集: {folder_info['episodes']} (共{folder_info['video_count']}集)")
+                print(f"     🎬 剧集: {folder_info['episodes']}")
             print("-" * 80)
 
         # 让用户选择文件夹
@@ -550,7 +550,7 @@ class TorrentMakerApp:
             
             # 显示剧集信息
             if folder_info.get('episodes') and folder_info.get('video_count', 0) > 0:
-                print(f"     🎭 剧集信息: {folder_info['episodes']} (共{folder_info['video_count']}集)")
+                print(f"     🎭 剧集信息: {folder_info['episodes']}")
                 
                 # 提供详细剧集列表的选项
                 file_matcher = FileMatcher(self.config_manager.get_resource_folder())
