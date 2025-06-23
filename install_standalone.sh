@@ -50,7 +50,7 @@ done
 if [ "$QUIET_MODE" = false ]; then
     echo "🎬 Torrent Maker 单文件版本安装器"
     echo "=================================="
-    echo "版本: $VERSION"
+    echo "版本: $VERSION (安装脚本: v1.0.2-fix)"
     echo "仓库: https://github.com/$REPO"
     echo ""
 fi
@@ -252,11 +252,14 @@ create_directories() {
 # 下载并安装
 download_and_install() {
     print_info "下载 Torrent Maker..."
+    print_info "使用直接下载模式 (v1.0.2-fix)"
     
     # 直接下载单文件到安装目录
     if command_exists curl; then
+        print_info "下载地址: $DOWNLOAD_URL"
         curl -L "$DOWNLOAD_URL" -o "$INSTALL_DIR/$SCRIPT_NAME"
     elif command_exists wget; then
+        print_info "下载地址: $DOWNLOAD_URL"
         wget "$DOWNLOAD_URL" -O "$INSTALL_DIR/$SCRIPT_NAME"
     else
         print_error "需要 curl 或 wget 来下载文件"
@@ -264,6 +267,7 @@ download_and_install() {
     fi
     
     print_success "下载完成"
+    print_info "跳过解压步骤 (直接下载单文件)"
     
     # 设置执行权限
     chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
