@@ -10,7 +10,8 @@ REPO="Yan-nian/torrent-maker"
 INSTALL_DIR="$HOME/.local/bin"
 CONFIG_DIR="$HOME/.torrent_maker"
 SCRIPT_NAME="torrent_maker.py"
-DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/torrent-maker-standalone.tar.gz"
+# 临时使用raw文件下载，直到GitHub Release创建完成
+DOWNLOAD_URL="https://raw.githubusercontent.com/$REPO/main/torrent_maker.py"
 
 # 解析命令行参数
 FORCE_INSTALL=false
@@ -252,14 +253,11 @@ create_directories() {
 download_and_install() {
     print_info "下载 Torrent Maker..."
     
-    temp_dir=$(mktemp -d)
-    cd "$temp_dir"
-    
-    # 下载发布包
+    # 直接下载单文件到安装目录
     if command_exists curl; then
-        curl -L "$DOWNLOAD_URL" -o torrent-maker-standalone.tar.gz
+        curl -L "$DOWNLOAD_URL" -o "$INSTALL_DIR/$SCRIPT_NAME"
     elif command_exists wget; then
-        wget "$DOWNLOAD_URL" -O torrent-maker-standalone.tar.gz
+        wget "$DOWNLOAD_URL" -O "$INSTALL_DIR/$SCRIPT_NAME"
     else
         print_error "需要 curl 或 wget 来下载文件"
         exit 1
@@ -267,21 +265,11 @@ download_and_install() {
     
     print_success "下载完成"
     
-    # 解压
-    print_info "解压文件..."
-    tar -xzf torrent-maker-standalone.tar.gz
-    
-    # 安装
-    print_info "安装到 $INSTALL_DIR..."
-    cp standalone/torrent_maker.py "$INSTALL_DIR/"
+    # 设置执行权限
     chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
     
     # 保存版本信息
     echo "$VERSION" > "$CONFIG_DIR/version"
-    
-    # 清理临时文件
-    cd - >/dev/null
-    rm -rf "$temp_dir"
     
     print_success "安装完成"
 }
