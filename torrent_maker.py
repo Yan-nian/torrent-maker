@@ -1015,7 +1015,7 @@ def main():
     """主函数"""
     print("🎬 Torrent Maker - 单文件版本")
     print("基于 mktorrent 的半自动化种子制作工具")
-    print("版本：1.0.0 | 许可证：MIT")
+    print("版本：1.0.2 | 许可证：MIT")
     print()
     
     app = TorrentMakerApp()
