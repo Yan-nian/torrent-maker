@@ -347,10 +347,30 @@ class ConfigManager:
         except Exception as e:
             print(f"保存 tracker 时出错: {e}")
 
-    def set_resource_folder(self, path: str):
-        expanded_path = os.path.expanduser(path)
-        self.settings['resource_folder'] = expanded_path
-        self.save_settings()
+    def set_resource_folder(self, path: str) -> bool:
+        """设置资源文件夹路径，并验证路径有效性"""
+        try:
+            expanded_path = os.path.expanduser(path)
+            expanded_path = os.path.abspath(expanded_path)
+
+            # 检查路径是否存在
+            if not os.path.exists(expanded_path):
+                print(f"❌ 路径不存在: {expanded_path}")
+                return False
+
+            # 检查是否为目录
+            if not os.path.isdir(expanded_path):
+                print(f"❌ 路径不是目录: {expanded_path}")
+                return False
+
+            self.settings['resource_folder'] = expanded_path
+            self.save_settings()
+            print(f"✅ 资源文件夹已设置为: {expanded_path}")
+            return True
+
+        except Exception as e:
+            print(f"❌ 设置资源文件夹失败: {e}")
+            return False
 
     def set_output_folder(self, path: str):
         expanded_path = os.path.expanduser(path)
@@ -582,7 +602,7 @@ class FileMatcher:
                     return None
 
             # 并行处理文件夹，但限制批次大小以避免内存问题
-            batch_size = min(1000, len(all_folders))
+            batch_size = min(1000, len(all_folders)) if all_folders else 1
 
             for i in range(0, len(all_folders), batch_size):
                 batch_folders = all_folders[i:i + batch_size]
