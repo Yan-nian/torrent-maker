@@ -370,6 +370,36 @@ class ConfigManager:
             return True
         return False
 
+    def get_setting(self, key: str, default=None):
+        """获取单个设置项
+
+        Args:
+            key: 设置项键名
+            default: 默认值
+
+        Returns:
+            设置项的值
+        """
+        return self.settings.get(key, default)
+
+    def set_setting(self, key: str, value):
+        """设置单个配置项
+
+        Args:
+            key: 设置项键名
+            value: 设置项的值
+
+        Returns:
+            设置成功返回True，否则返回False
+        """
+        try:
+            self.settings[key] = value
+            self.save_settings()
+            return True
+        except Exception as e:
+            print(f"设置配置项失败: {e}")
+            return False
+
 
 # ================== 文件匹配器 ==================
 class FileMatcher:
