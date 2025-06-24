@@ -1,4 +1,7 @@
-# 种子制作工具依赖包
+# Torrent Maker v1.3.0 依赖包
+
+# 性能监控（可选，用于详细的系统监控）
+psutil>=5.8.0
 
 # JSON 数据验证
 jsonschema>=4.0.0
