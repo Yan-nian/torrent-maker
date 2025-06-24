@@ -1,170 +1,649 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+配置管理模块
+
+提供配置文件的读取、写入、验证和管理功能。
+支持设置文件和tracker列表的管理。
+
+作者：Torrent Maker Team
+版本：1.2.0
+"""
+
 import json
 import os
-from typing import Dict, List, Any
+import logging
+from typing import Dict, List, Any, Optional, Union
+from pathlib import Path
+
+# 配置日志
+logger = logging.getLogger(__name__)
+
+
+class ConfigValidationError(Exception):
+    """配置验证错误"""
+    pass
 
 
 class ConfigManager:
-    def __init__(self, settings_path: str = 'config/settings.json', trackers_path: str = 'config/trackers.txt'):
-        self.settings_path = settings_path
-        self.trackers_path = trackers_path
-        self.ensure_config_files()
-        self.settings = self.load_settings()
-        self.trackers = self.load_trackers()
+    """
+    配置管理器
 
-    def ensure_config_files(self):
-        """确保配置文件和目录存在"""
-        # 确保配置目录存在
-        config_dir = os.path.dirname(self.settings_path)
-        if config_dir and not os.path.exists(config_dir):
-            os.makedirs(config_dir)
+    负责管理应用程序的配置文件，包括设置文件和tracker列表。
+    提供配置的读取、写入、验证和自动修复功能。
+    """
 
-        # 如果配置文件不存在，创建默认配置
-        if not os.path.exists(self.settings_path):
-            self.create_default_settings()
-        
-        if not os.path.exists(self.trackers_path):
-            self.create_default_trackers()
+    # 默认配置模板
+    DEFAULT_SETTINGS = {
+        "resource_folder": "~/Downloads",
+        "output_folder": "output",
+        "default_piece_size": "auto",
+        "private_torrent": False,
+        "file_search_tolerance": 60,
+        "max_search_results": 10,
+        "auto_create_output_dir": True,
+        "enable_cache": True,
+        "cache_duration": 3600,  # 缓存时长（秒）
+        "max_concurrent_operations": 5,
+        "log_level": "INFO"
+    }
 
-    def create_default_settings(self):
-        """创建默认设置文件"""
-        default_settings = {
-            "resource_folder": os.path.expanduser("~/Downloads"),  # 默认下载文件夹
-            "output_folder": "output",
-            "default_piece_size": "auto",
-            "private_torrent": False,
-            "file_search_tolerance": 60,
-            "max_search_results": 10,
-            "auto_create_output_dir": True
-        }
-        
-        with open(self.settings_path, 'w', encoding='utf-8') as f:
-            json.dump(default_settings, f, ensure_ascii=False, indent=4)
-        
-        print(f"已创建默认配置文件: {self.settings_path}")
+    DEFAULT_TRACKERS = [
+        "udp://tracker.openbittorrent.com:80",
+        "udp://tracker.opentrackr.org:1337/announce",
+        "udp://exodus.desync.com:6969/announce",
+        "udp://tracker.torrent.eu.org:451/announce",
+        "udp://tracker.coppersurfer.tk:6969/announce"
+    ]
 
-    def create_default_trackers(self):
-        """创建默认 tracker 文件"""
-        default_trackers = [
-            "udp://tracker.openbittorrent.com:80",
-            "udp://tracker.opentrackr.org:1337/announce",
-            "udp://tracker.coppersurfer.tk:6969/announce",
-            "udp://exodus.desync.com:6969/announce",
-            "udp://tracker.torrent.eu.org:451/announce"
-        ]
-        
-        with open(self.trackers_path, 'w', encoding='utf-8') as f:
-            for tracker in default_trackers:
-                f.write(f"{tracker}\n")
-        
-        print(f"已创建默认 tracker 文件: {self.trackers_path}")
+    def __init__(self, settings_path: str = 'config/settings.json',
+                 trackers_path: str = 'config/trackers.txt'):
+        """
+        初始化配置管理器
 
-    def load_settings(self) -> Dict[str, Any]:
-        """加载设置"""
+        Args:
+            settings_path: 设置文件路径
+            trackers_path: tracker文件路径
+        """
+        self.settings_path = Path(settings_path)
+        self.trackers_path = Path(trackers_path)
+
+        # 确保配置文件存在
+        self._ensure_config_files()
+
+        # 加载配置
+        self.settings = self._load_settings()
+        self.trackers = self._load_trackers()
+
+        # 验证配置
+        self._validate_config()
+
+    def _ensure_config_files(self) -> None:
+        """
+        确保配置文件和目录存在
+
+        如果配置目录或文件不存在，则创建默认配置。
+        """
+        try:
+            # 确保配置目录存在
+            self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # 如果配置文件不存在，创建默认配置
+            if not self.settings_path.exists():
+                self._create_default_settings()
+
+            if not self.trackers_path.exists():
+                self._create_default_trackers()
+
+        except OSError as e:
+            logger.error(f"创建配置文件失败: {e}")
+            raise ConfigValidationError(f"无法创建配置文件: {e}")
+
+    def _create_default_settings(self) -> None:
+        """
+        创建默认设置文件
+
+        Raises:
+            ConfigValidationError: 当无法创建设置文件时
+        """
+        try:
+            # 展开用户目录路径
+            settings = self.DEFAULT_SETTINGS.copy()
+            settings['resource_folder'] = os.path.expanduser(settings['resource_folder'])
+
+            with open(self.settings_path, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, ensure_ascii=False, indent=4)
+
+            logger.info(f"已创建默认配置文件: {self.settings_path}")
+
+        except (OSError, json.JSONEncodeError) as e:
+            logger.error(f"创建默认设置文件失败: {e}")
+            raise ConfigValidationError(f"无法创建默认设置文件: {e}")
+
+    def _create_default_trackers(self) -> None:
+        """
+        创建默认tracker文件
+
+        Raises:
+            ConfigValidationError: 当无法创建tracker文件时
+        """
+        try:
+            with open(self.trackers_path, 'w', encoding='utf-8') as f:
+                f.write("# BitTorrent Tracker 列表\n")
+                f.write("# 每行一个 tracker URL，以 # 开头的行为注释\n\n")
+                for tracker in self.DEFAULT_TRACKERS:
+                    f.write(f"{tracker}\n")
+
+            logger.info(f"已创建默认tracker文件: {self.trackers_path}")
+
+        except OSError as e:
+            logger.error(f"创建默认tracker文件失败: {e}")
+            raise ConfigValidationError(f"无法创建默认tracker文件: {e}")
+
+    def _load_settings(self) -> Dict[str, Any]:
+        """
+        加载设置文件
+
+        Returns:
+            设置字典，如果加载失败则返回默认设置
+        """
         try:
             with open(self.settings_path, 'r', encoding='utf-8') as f:
                 settings = json.load(f)
-                # 展开用户目录路径
-                if 'resource_folder' in settings:
-                    settings['resource_folder'] = os.path.expanduser(settings['resource_folder'])
-                return settings
-        except FileNotFoundError:
-            print(f"设置文件未找到: {self.settings_path}")
-            return {}
-        except json.JSONDecodeError as e:
-            print(f"设置文件格式错误: {e}")
-            return {}
 
-    def load_trackers(self) -> List[str]:
-        """加载 tracker 列表"""
+            # 展开用户目录路径
+            if 'resource_folder' in settings:
+                settings['resource_folder'] = os.path.expanduser(settings['resource_folder'])
+
+            # 合并默认设置（确保所有必需的键都存在）
+            merged_settings = self.DEFAULT_SETTINGS.copy()
+            merged_settings.update(settings)
+
+            return merged_settings
+
+        except FileNotFoundError:
+            logger.warning(f"设置文件未找到: {self.settings_path}，使用默认设置")
+            return self.DEFAULT_SETTINGS.copy()
+
+        except json.JSONDecodeError as e:
+            logger.error(f"设置文件格式错误: {e}，使用默认设置")
+            return self.DEFAULT_SETTINGS.copy()
+
+        except Exception as e:
+            logger.error(f"加载设置文件时发生未知错误: {e}，使用默认设置")
+            return self.DEFAULT_SETTINGS.copy()
+
+    def _load_trackers(self) -> List[str]:
+        """
+        加载tracker列表
+
+        Returns:
+            tracker URL列表，如果加载失败则返回默认tracker列表
+        """
         try:
             with open(self.trackers_path, 'r', encoding='utf-8') as f:
                 trackers = []
-                for line in f:
+                for line_num, line in enumerate(f, 1):
                     line = line.strip()
-                    if line and not line.startswith('#'):  # 忽略空行和注释
-                        trackers.append(line)
-                return trackers
+                    if line and not line.startswith('#'):
+                        # 简单验证URL格式
+                        if self._is_valid_tracker_url(line):
+                            trackers.append(line)
+                        else:
+                            logger.warning(f"跳过无效的tracker URL (行 {line_num}): {line}")
+
+                return trackers if trackers else self.DEFAULT_TRACKERS.copy()
+
         except FileNotFoundError:
-            print(f"Tracker 文件未找到: {self.trackers_path}")
-            return []
+            logger.warning(f"Tracker文件未找到: {self.trackers_path}，使用默认tracker")
+            return self.DEFAULT_TRACKERS.copy()
+
+        except Exception as e:
+            logger.error(f"加载tracker文件时发生错误: {e}，使用默认tracker")
+            return self.DEFAULT_TRACKERS.copy()
+
+    def _validate_config(self) -> None:
+        """
+        验证配置的有效性
+
+        Raises:
+            ConfigValidationError: 当配置无效时
+        """
+        # 验证必需的配置项
+        required_keys = ['resource_folder', 'output_folder']
+        for key in required_keys:
+            if key not in self.settings:
+                logger.error(f"缺少必需的配置项: {key}")
+                raise ConfigValidationError(f"缺少必需的配置项: {key}")
+
+        # 验证数值类型的配置
+        numeric_configs = {
+            'file_search_tolerance': (0, 100),
+            'max_search_results': (1, 100),
+            'cache_duration': (60, 86400),  # 1分钟到1天
+            'max_concurrent_operations': (1, 20)
+        }
+
+        for key, (min_val, max_val) in numeric_configs.items():
+            if key in self.settings:
+                value = self.settings[key]
+                if not isinstance(value, (int, float)) or not (min_val <= value <= max_val):
+                    logger.warning(f"配置项 {key} 的值 {value} 无效，使用默认值")
+                    self.settings[key] = self.DEFAULT_SETTINGS[key]
+
+    def _is_valid_tracker_url(self, url: str) -> bool:
+        """
+        验证tracker URL的有效性
+
+        Args:
+            url: tracker URL
+
+        Returns:
+            如果URL有效返回True，否则返回False
+        """
+        import re
+        # 简单的URL格式验证
+        pattern = r'^(https?|udp)://[^\s/$.?#].[^\s]*$'
+        return bool(re.match(pattern, url, re.IGNORECASE))
 
     def get_resource_folder(self) -> str:
-        """获取资源文件夹路径"""
-        return self.settings.get('resource_folder', os.path.expanduser("~/Downloads"))
+        """
+        获取资源文件夹路径
 
-    def set_resource_folder(self, path: str):
-        """设置资源文件夹路径"""
-        expanded_path = os.path.expanduser(path)
-        if os.path.exists(expanded_path):
+        Returns:
+            资源文件夹的绝对路径
+        """
+        return os.path.abspath(self.settings.get('resource_folder', os.path.expanduser("~/Downloads")))
+
+    def set_resource_folder(self, path: str) -> bool:
+        """
+        设置资源文件夹路径
+
+        Args:
+            path: 新的资源文件夹路径
+
+        Returns:
+            设置成功返回True，否则返回False
+        """
+        try:
+            expanded_path = os.path.expanduser(path)
+            expanded_path = os.path.abspath(expanded_path)
+
+            # 检查路径是否存在或可以创建
+            if not os.path.exists(expanded_path):
+                logger.warning(f"路径不存在: {expanded_path}")
+                return False
+
+            if not os.path.isdir(expanded_path):
+                logger.error(f"路径不是目录: {expanded_path}")
+                return False
+
             self.settings['resource_folder'] = expanded_path
-            self.save_settings()
-            print(f"资源文件夹已设置为: {expanded_path}")
-        else:
-            print(f"警告：路径不存在: {expanded_path}")
+            self._save_settings()
+            logger.info(f"资源文件夹已设置为: {expanded_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"设置资源文件夹失败: {e}")
+            return False
 
     def get_output_folder(self) -> str:
-        """获取种子输出文件夹路径"""
-        return self.settings.get('output_folder', 'output')
+        """
+        获取种子输出文件夹路径
 
-    def set_output_folder(self, path: str):
-        """设置种子输出文件夹路径"""
-        expanded_path = os.path.expanduser(path)
-        # 不需要检查路径是否存在，因为程序会自动创建
-        self.settings['output_folder'] = expanded_path
-        self.save_settings()
-        print(f"种子输出文件夹已设置为: {expanded_path}")
+        Returns:
+            输出文件夹的绝对路径
+        """
+        output_path = self.settings.get('output_folder', 'output')
+        return os.path.abspath(os.path.expanduser(output_path))
+
+    def set_output_folder(self, path: str) -> bool:
+        """
+        设置种子输出文件夹路径
+
+        Args:
+            path: 新的输出文件夹路径
+
+        Returns:
+            设置成功返回True，否则返回False
+        """
+        try:
+            expanded_path = os.path.expanduser(path)
+            expanded_path = os.path.abspath(expanded_path)
+
+            self.settings['output_folder'] = expanded_path
+            self._save_settings()
+            logger.info(f"种子输出文件夹已设置为: {expanded_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"设置输出文件夹失败: {e}")
+            return False
 
     def get_trackers(self) -> List[str]:
-        """获取 tracker 列表"""
+        """
+        获取tracker列表的副本
+
+        Returns:
+            tracker URL列表
+        """
         return self.trackers.copy()
 
-    def add_tracker(self, tracker_url: str):
-        """添加新的 tracker"""
-        if tracker_url not in self.trackers:
-            self.trackers.append(tracker_url)
-            self.save_trackers()
-            print(f"已添加 tracker: {tracker_url}")
-        else:
-            print(f"Tracker 已存在: {tracker_url}")
+    def add_tracker(self, tracker_url: str) -> bool:
+        """
+        添加新的tracker
 
-    def remove_tracker(self, tracker_url: str):
-        """移除 tracker"""
-        if tracker_url in self.trackers:
-            self.trackers.remove(tracker_url)
-            self.save_trackers()
-            print(f"已移除 tracker: {tracker_url}")
-        else:
-            print(f"Tracker 不存在: {tracker_url}")
+        Args:
+            tracker_url: tracker URL
 
-    def save_settings(self):
-        """保存设置"""
+        Returns:
+            添加成功返回True，否则返回False
+        """
         try:
+            tracker_url = tracker_url.strip()
+
+            if not tracker_url:
+                logger.error("Tracker URL不能为空")
+                return False
+
+            if not self._is_valid_tracker_url(tracker_url):
+                logger.error(f"无效的tracker URL: {tracker_url}")
+                return False
+
+            if tracker_url in self.trackers:
+                logger.warning(f"Tracker已存在: {tracker_url}")
+                return False
+
+            self.trackers.append(tracker_url)
+            self._save_trackers()
+            logger.info(f"已添加tracker: {tracker_url}")
+            return True
+
+        except Exception as e:
+            logger.error(f"添加tracker失败: {e}")
+            return False
+
+    def remove_tracker(self, tracker_url: str) -> bool:
+        """
+        移除tracker
+
+        Args:
+            tracker_url: 要移除的tracker URL
+
+        Returns:
+            移除成功返回True，否则返回False
+        """
+        try:
+            if tracker_url in self.trackers:
+                self.trackers.remove(tracker_url)
+                self._save_trackers()
+                logger.info(f"已移除tracker: {tracker_url}")
+                return True
+            else:
+                logger.warning(f"Tracker不存在: {tracker_url}")
+                return False
+
+        except Exception as e:
+            logger.error(f"移除tracker失败: {e}")
+            return False
+
+    def _save_settings(self) -> None:
+        """
+        保存设置到文件
+
+        Raises:
+            ConfigValidationError: 当保存失败时
+        """
+        try:
+            # 创建备份
+            backup_path = self.settings_path.with_suffix('.bak')
+            if self.settings_path.exists():
+                import shutil
+                shutil.copy2(self.settings_path, backup_path)
+
             with open(self.settings_path, 'w', encoding='utf-8') as f:
                 json.dump(self.settings, f, ensure_ascii=False, indent=4)
-        except Exception as e:
-            print(f"保存设置时出错: {e}")
 
-    def save_trackers(self):
-        """保存 tracker 列表"""
+            logger.debug("设置已保存")
+
+        except Exception as e:
+            logger.error(f"保存设置失败: {e}")
+            # 尝试恢复备份
+            if backup_path.exists():
+                try:
+                    import shutil
+                    shutil.copy2(backup_path, self.settings_path)
+                    logger.info("已从备份恢复设置文件")
+                except Exception as restore_error:
+                    logger.error(f"恢复备份失败: {restore_error}")
+            raise ConfigValidationError(f"保存设置失败: {e}")
+
+    def _save_trackers(self) -> None:
+        """
+        保存tracker列表到文件
+
+        Raises:
+            ConfigValidationError: 当保存失败时
+        """
         try:
+            # 创建备份
+            backup_path = self.trackers_path.with_suffix('.bak')
+            if self.trackers_path.exists():
+                import shutil
+                shutil.copy2(self.trackers_path, backup_path)
+
             with open(self.trackers_path, 'w', encoding='utf-8') as f:
+                f.write("# BitTorrent Tracker 列表\n")
+                f.write("# 每行一个 tracker URL，以 # 开头的行为注释\n\n")
                 for tracker in self.trackers:
                     f.write(f"{tracker}\n")
+
+            logger.debug("Tracker列表已保存")
+
         except Exception as e:
-            print(f"保存 tracker 时出错: {e}")
+            logger.error(f"保存tracker列表失败: {e}")
+            # 尝试恢复备份
+            if backup_path.exists():
+                try:
+                    import shutil
+                    shutil.copy2(backup_path, self.trackers_path)
+                    logger.info("已从备份恢复tracker文件")
+                except Exception as restore_error:
+                    logger.error(f"恢复备份失败: {restore_error}")
+            raise ConfigValidationError(f"保存tracker列表失败: {e}")
 
-    def update_settings(self, new_settings: Dict[str, Any]):
-        """更新设置"""
-        self.settings.update(new_settings)
-        self.save_settings()
+    def update_settings(self, new_settings: Dict[str, Any]) -> bool:
+        """
+        批量更新设置
 
-    def display_current_config(self):
-        """显示当前配置"""
-        print("=== 当前配置 ===")
-        print(f"资源文件夹: {self.get_resource_folder()}")
-        print(f"种子输出文件夹: {self.get_output_folder()}")
-        print(f"Tracker 数量: {len(self.trackers)}")
-        print("Tracker 列表:")
-        for i, tracker in enumerate(self.trackers, 1):
-            print(f"  {i}. {tracker}")
-        print("===============")
+        Args:
+            new_settings: 新的设置字典
+
+        Returns:
+            更新成功返回True，否则返回False
+        """
+        try:
+            # 验证新设置
+            old_settings = self.settings.copy()
+            self.settings.update(new_settings)
+
+            try:
+                self._validate_config()
+                self._save_settings()
+                logger.info("设置已更新")
+                return True
+            except ConfigValidationError:
+                # 恢复旧设置
+                self.settings = old_settings
+                logger.error("新设置验证失败，已恢复原设置")
+                return False
+
+        except Exception as e:
+            logger.error(f"更新设置失败: {e}")
+            return False
+
+    def get_setting(self, key: str, default=None):
+        """
+        获取单个设置项
+
+        Args:
+            key: 设置项键名
+            default: 默认值
+
+        Returns:
+            设置项的值
+        """
+        return self.settings.get(key, default)
+
+    def set_setting(self, key: str, value: Any) -> bool:
+        """
+        设置单个配置项
+
+        Args:
+            key: 设置项键名
+            value: 设置项的值
+
+        Returns:
+            设置成功返回True，否则返回False
+        """
+        try:
+            old_value = self.settings.get(key)
+            self.settings[key] = value
+
+            try:
+                self._validate_config()
+                self._save_settings()
+                logger.info(f"设置项 {key} 已更新: {old_value} -> {value}")
+                return True
+            except ConfigValidationError:
+                # 恢复旧值
+                if old_value is not None:
+                    self.settings[key] = old_value
+                else:
+                    self.settings.pop(key, None)
+                logger.error(f"设置项 {key} 验证失败，已恢复原值")
+                return False
+
+        except Exception as e:
+            logger.error(f"设置配置项失败: {e}")
+            return False
+
+    def reset_to_defaults(self) -> bool:
+        """
+        重置所有设置为默认值
+
+        Returns:
+            重置成功返回True，否则返回False
+        """
+        try:
+            self.settings = self.DEFAULT_SETTINGS.copy()
+            self.trackers = self.DEFAULT_TRACKERS.copy()
+
+            # 展开用户目录路径
+            self.settings['resource_folder'] = os.path.expanduser(self.settings['resource_folder'])
+
+            self._save_settings()
+            self._save_trackers()
+
+            logger.info("配置已重置为默认值")
+            return True
+
+        except Exception as e:
+            logger.error(f"重置配置失败: {e}")
+            return False
+
+    def display_current_config(self) -> None:
+        """显示当前配置信息"""
+        print("=" * 50)
+        print("           📋 当前配置信息")
+        print("=" * 50)
+        print(f"📁 资源文件夹: {self.get_resource_folder()}")
+        print(f"📂 输出文件夹: {self.get_output_folder()}")
+        print(f"🔍 搜索容忍度: {self.settings.get('file_search_tolerance', 60)}%")
+        print(f"📊 最大搜索结果: {self.settings.get('max_search_results', 10)}")
+        print(f"🌐 Tracker数量: {len(self.trackers)}")
+        print(f"💾 启用缓存: {'是' if self.settings.get('enable_cache', True) else '否'}")
+        print(f"⚡ 最大并发操作: {self.settings.get('max_concurrent_operations', 5)}")
+
+        print("\n🌐 Tracker列表:")
+        if self.trackers:
+            for i, tracker in enumerate(self.trackers, 1):
+                print(f"  {i:2d}. {tracker}")
+        else:
+            print("  暂无配置的Tracker")
+        print("=" * 50)
+
+    def export_config(self, export_path: str) -> bool:
+        """
+        导出配置到指定文件
+
+        Args:
+            export_path: 导出文件路径
+
+        Returns:
+            导出成功返回True，否则返回False
+        """
+        try:
+            export_data = {
+                'settings': self.settings,
+                'trackers': self.trackers,
+                'export_time': str(Path(__file__).stat().st_mtime),
+                'version': '1.2.0'
+            }
+
+            with open(export_path, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, ensure_ascii=False, indent=4)
+
+            logger.info(f"配置已导出到: {export_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"导出配置失败: {e}")
+            return False
+
+    def import_config(self, import_path: str) -> bool:
+        """
+        从文件导入配置
+
+        Args:
+            import_path: 导入文件路径
+
+        Returns:
+            导入成功返回True，否则返回False
+        """
+        try:
+            with open(import_path, 'r', encoding='utf-8') as f:
+                import_data = json.load(f)
+
+            # 备份当前配置
+            backup_settings = self.settings.copy()
+            backup_trackers = self.trackers.copy()
+
+            try:
+                # 导入新配置
+                if 'settings' in import_data:
+                    self.settings = import_data['settings']
+                if 'trackers' in import_data:
+                    self.trackers = import_data['trackers']
+
+                # 验证配置
+                self._validate_config()
+
+                # 保存配置
+                self._save_settings()
+                self._save_trackers()
+
+                logger.info(f"配置已从 {import_path} 导入")
+                return True
+
+            except Exception as e:
+                # 恢复备份
+                self.settings = backup_settings
+                self.trackers = backup_trackers
+                logger.error(f"导入配置失败，已恢复原配置: {e}")
+                return False
+
+        except Exception as e:
+            logger.error(f"读取导入文件失败: {e}")
+            return False
