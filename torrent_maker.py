@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v1.2.0
+Torrent Maker - 单文件版本 v1.3.0
 基于 mktorrent 的高性能半自动化种子制作工具
 
-🚀 v1.2.0 重大更新:
+🚀 v1.3.0 重大更新:
 - ⚡ 搜索速度提升60%，缓存性能提升78.8%
 - 💾 内存使用优化40%，多线程并行处理
 - 🛡️ 全面错误处理，配置验证和自动修复
@@ -17,7 +17,7 @@ Torrent Maker - 单文件版本 v1.2.0
 
 作者：Torrent Maker Team
 许可证：MIT
-版本：1.2.0
+版本：1.3.0
 """
 
 import os
@@ -29,39 +29,182 @@ import time
 import logging
 import hashlib
 import tempfile
+import threading
 from datetime import datetime
 from difflib import SequenceMatcher
 from typing import List, Dict, Any, Tuple, Optional, Union
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 
 # 配置日志
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 
+# ================== 性能监控 ==================
+class PerformanceMonitor:
+    """性能监控类"""
+
+    def __init__(self):
+        self._timers: Dict[str, float] = {}
+        self._stats: Dict[str, List[float]] = {}
+        self._lock = threading.Lock()
+
+    def start_timer(self, name: str) -> None:
+        with self._lock:
+            self._timers[name] = time.time()
+
+    def end_timer(self, name: str) -> float:
+        with self._lock:
+            if name in self._timers:
+                duration = time.time() - self._timers[name]
+                if name not in self._stats:
+                    self._stats[name] = []
+                self._stats[name].append(duration)
+                del self._timers[name]
+                return duration
+            return 0.0
+
+    def get_stats(self, name: str) -> Dict[str, float]:
+        with self._lock:
+            if name not in self._stats or not self._stats[name]:
+                return {}
+
+            times = self._stats[name]
+            return {
+                'count': len(times),
+                'total': sum(times),
+                'average': sum(times) / len(times),
+                'min': min(times),
+                'max': max(times)
+            }
+
+    def get_all_stats(self) -> Dict[str, Dict[str, float]]:
+        with self._lock:
+            return {name: self.get_stats(name) for name in self._stats.keys()}
+
+
 # ================== 缓存系统 ==================
 class SearchCache:
     """搜索结果缓存类"""
-    
+
     def __init__(self, cache_duration: int = 3600):
         self.cache_duration = cache_duration
         self._cache: Dict[str, Tuple[float, Any]] = {}
-        
+        self._lock = threading.Lock()
+
     def get(self, key: str) -> Optional[Any]:
-        if key in self._cache:
-            timestamp, value = self._cache[key]
-            if time.time() - timestamp < self.cache_duration:
-                return value
-            else:
-                del self._cache[key]
-        return None
-        
+        with self._lock:
+            if key in self._cache:
+                timestamp, value = self._cache[key]
+                if time.time() - timestamp < self.cache_duration:
+                    return value
+                else:
+                    del self._cache[key]
+            return None
+
     def set(self, key: str, value: Any) -> None:
-        self._cache[key] = (time.time(), value)
-        
+        with self._lock:
+            self._cache[key] = (time.time(), value)
+
     def clear(self) -> None:
-        self._cache.clear()
+        with self._lock:
+            self._cache.clear()
+
+    def get_stats(self) -> Dict[str, Any]:
+        with self._lock:
+            total_items = len(self._cache)
+            current_time = time.time()
+            expired_items = sum(1 for timestamp, _ in self._cache.values()
+                              if current_time - timestamp >= self.cache_duration)
+            return {
+                'total_items': total_items,
+                'valid_items': total_items - expired_items,
+                'expired_items': expired_items
+            }
+
+
+# ================== 目录大小缓存 ==================
+class DirectorySizeCache:
+    """目录大小缓存类 - 优化大目录的大小计算"""
+
+    def __init__(self, cache_duration: int = 1800):  # 30分钟缓存
+        self.cache_duration = cache_duration
+        self._cache: Dict[str, Tuple[float, int, float]] = {}  # path -> (timestamp, size, mtime)
+        self._lock = threading.Lock()
+
+    def get_directory_size(self, path: Path) -> int:
+        """获取目录大小，使用缓存优化"""
+        path_str = str(path)
+        current_time = time.time()
+
+        try:
+            # 获取目录的修改时间
+            dir_mtime = path.stat().st_mtime
+        except (OSError, PermissionError):
+            return self._calculate_size_fallback(path)
+
+        with self._lock:
+            # 检查缓存
+            if path_str in self._cache:
+                timestamp, cached_size, cached_mtime = self._cache[path_str]
+                # 如果缓存未过期且目录未修改，返回缓存值
+                if (current_time - timestamp < self.cache_duration and
+                    abs(dir_mtime - cached_mtime) < 1.0):  # 1秒容差
+                    return cached_size
+
+        # 计算目录大小
+        total_size = self._calculate_size_optimized(path)
+
+        # 更新缓存
+        with self._lock:
+            self._cache[path_str] = (current_time, total_size, dir_mtime)
+
+        return total_size
+
+    def _calculate_size_optimized(self, path: Path) -> int:
+        """优化的目录大小计算"""
+        total_size = 0
+
+        try:
+            # 使用 os.scandir 替代 rglob，性能更好
+            def scan_directory(dir_path: Path) -> int:
+                size = 0
+                try:
+                    with os.scandir(dir_path) as entries:
+                        for entry in entries:
+                            if entry.is_file(follow_symlinks=False):
+                                try:
+                                    size += entry.stat().st_size
+                                except (OSError, IOError):
+                                    pass
+                            elif entry.is_dir(follow_symlinks=False):
+                                size += scan_directory(Path(entry.path))
+                except (PermissionError, OSError):
+                    pass
+                return size
+
+            total_size = scan_directory(path)
+
+        except Exception:
+            # 回退到原始方法
+            total_size = self._calculate_size_fallback(path)
+
+        return total_size
+
+    def _calculate_size_fallback(self, path: Path) -> int:
+        """回退的目录大小计算方法"""
+        total_size = 0
+        try:
+            for file_path in path.rglob('*'):
+                if file_path.is_file():
+                    try:
+                        total_size += file_path.stat().st_size
+                    except (OSError, IOError):
+                        pass
+        except (OSError, PermissionError):
+            pass
+        return total_size
 
 
 # ================== 异常类 ==================
@@ -244,14 +387,16 @@ class FileMatcher:
     
     SEPARATORS = ['.', '_', '-', ':', '|', '\\', '/', '+', '(', ')', '[', ']']
 
-    def __init__(self, base_directory: str, enable_cache: bool = True, 
+    def __init__(self, base_directory: str, enable_cache: bool = True,
                  cache_duration: int = 3600, min_score: float = 0.6,
                  max_workers: int = 4):
         self.base_directory = Path(base_directory)
         self.min_score = min_score
         self.max_workers = max_workers
         self.cache = SearchCache(cache_duration) if enable_cache else None
-        
+        self.folder_info_cache = SearchCache(cache_duration) if enable_cache else None
+        self.performance_monitor = PerformanceMonitor()
+
         if not self.base_directory.exists():
             logger.warning(f"基础目录不存在: {self.base_directory}")
 
@@ -322,99 +467,170 @@ class FileMatcher:
         return min(1.0, basic_score + bonus_score)
 
     def get_all_folders(self, max_depth: int = 3) -> List[Path]:
-        """获取基础目录下的所有文件夹"""
+        """获取基础目录下的所有文件夹 - 性能优化版本"""
+        # 检查缓存
+        cache_key = f"all_folders:{self.base_directory}:{max_depth}"
+        if self.cache:
+            cached_folders = self.cache.get(cache_key)
+            if cached_folders is not None:
+                return cached_folders
+
+        self.performance_monitor.start_timer('folder_scanning')
         folders = []
 
         if not self.base_directory.exists():
             return folders
 
-        def _scan_directory(path: Path, current_depth: int = 0):
-            if current_depth >= max_depth:
-                return
+        try:
+            # 使用 os.scandir 替代 iterdir，性能更好
+            def _scan_directory_optimized(path: Path, current_depth: int = 0):
+                if current_depth >= max_depth:
+                    return
 
-            try:
-                for item in path.iterdir():
-                    if item.is_dir():
-                        folders.append(item)
-                        _scan_directory(item, current_depth + 1)
-            except (PermissionError, OSError):
-                pass
+                try:
+                    with os.scandir(path) as entries:
+                        for entry in entries:
+                            if entry.is_dir(follow_symlinks=False):
+                                folder_path = Path(entry.path)
+                                folders.append(folder_path)
+                                _scan_directory_optimized(folder_path, current_depth + 1)
+                except (PermissionError, OSError):
+                    pass
 
-        _scan_directory(self.base_directory)
+            _scan_directory_optimized(self.base_directory)
+
+            # 缓存结果
+            if self.cache:
+                self.cache.set(cache_key, folders)
+
+        finally:
+            scan_duration = self.performance_monitor.end_timer('folder_scanning')
+            if scan_duration > 3.0:  # 如果扫描时间超过3秒，记录警告
+                logger.warning(f"文件夹扫描耗时较长: {scan_duration:.2f}s, 找到 {len(folders)} 个文件夹")
+
         return folders
 
     def fuzzy_search(self, search_name: str, max_results: int = 10) -> List[Tuple[str, float]]:
-        """使用模糊匹配搜索文件夹"""
-        # 检查缓存
-        cache_key = self._generate_cache_key(search_name)
-        if self.cache:
-            cached_result = self.cache.get(cache_key)
-            if cached_result is not None:
-                return cached_result[:max_results]
+        """使用模糊匹配搜索文件夹 - 性能优化版本"""
+        self.performance_monitor.start_timer('fuzzy_search')
 
-        all_folders = self.get_all_folders()
-        matches = []
+        try:
+            # 检查缓存
+            cache_key = self._generate_cache_key(search_name)
+            if self.cache:
+                cached_result = self.cache.get(cache_key)
+                if cached_result is not None:
+                    return cached_result[:max_results]
 
-        def process_folder(folder_path: Path) -> Optional[Tuple[str, float]]:
-            try:
-                folder_name = folder_path.name
-                similarity_score = self.similarity(search_name, folder_name)
+            all_folders = self.get_all_folders()
+            matches = []
 
-                if similarity_score >= self.min_score:
-                    return (str(folder_path), similarity_score)
-                return None
-            except Exception:
-                return None
+            # 预处理搜索名称，提高匹配效率
+            normalized_search = self._normalize_string(search_name)
+            search_words = set(normalized_search.split())
 
-        # 并行处理文件夹
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            future_to_folder = {
-                executor.submit(process_folder, folder): folder
-                for folder in all_folders
-            }
+            def process_folder_optimized(folder_path: Path) -> Optional[Tuple[str, float]]:
+                try:
+                    folder_name = folder_path.name
 
-            for future in as_completed(future_to_folder):
-                result = future.result()
-                if result:
-                    matches.append(result)
+                    # 快速预筛选：检查是否包含任何搜索词
+                    normalized_folder = self._normalize_string(folder_name)
+                    folder_words = set(normalized_folder.split())
 
-        matches.sort(key=lambda x: x[1], reverse=True)
+                    # 如果没有共同词汇，跳过详细计算
+                    if not search_words.intersection(folder_words) and len(search_words) > 1:
+                        return None
 
-        # 缓存结果
-        if self.cache:
-            self.cache.set(cache_key, matches)
+                    similarity_score = self.similarity(search_name, folder_name)
 
-        return matches[:max_results]
+                    if similarity_score >= self.min_score:
+                        return (str(folder_path), similarity_score)
+                    return None
+                except Exception:
+                    return None
+
+            # 并行处理文件夹，但限制批次大小以避免内存问题
+            batch_size = min(1000, len(all_folders))
+
+            for i in range(0, len(all_folders), batch_size):
+                batch_folders = all_folders[i:i + batch_size]
+
+                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                    future_to_folder = {
+                        executor.submit(process_folder_optimized, folder): folder
+                        for folder in batch_folders
+                    }
+
+                    for future in as_completed(future_to_folder):
+                        result = future.result()
+                        if result:
+                            matches.append(result)
+
+            matches.sort(key=lambda x: x[1], reverse=True)
+
+            # 缓存结果
+            if self.cache:
+                self.cache.set(cache_key, matches)
+
+            return matches[:max_results]
+
+        finally:
+            search_duration = self.performance_monitor.end_timer('fuzzy_search')
+            matches_count = len(matches) if 'matches' in locals() else 0
+            print(f"  🔍 搜索耗时: {search_duration:.3f}s, 找到 {matches_count} 个匹配项")
 
     def get_folder_info(self, folder_path: str) -> Dict[str, Any]:
-        """获取文件夹详细信息"""
+        """获取文件夹详细信息 - 带缓存优化"""
         if not os.path.exists(folder_path):
             return {'exists': False}
 
-        total_files = 0
-        total_size = 0
+        # 检查缓存
+        cache_key = f"folder_info:{folder_path}"
+        if self.folder_info_cache:
+            cached_info = self.folder_info_cache.get(cache_key)
+            if cached_info is not None:
+                return cached_info
+
+        self.performance_monitor.start_timer('folder_info_calculation')
 
         try:
-            for root, dirs, files in os.walk(folder_path):
-                total_files += len(files)
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    try:
-                        total_size += os.path.getsize(file_path)
-                    except (OSError, IOError):
-                        pass
-        except PermissionError:
-            return {'exists': True, 'readable': False}
+            total_files = 0
+            total_size = 0
 
-        size_str = self.format_size(total_size)
+            try:
+                # 使用更高效的方法计算文件信息
+                path_obj = Path(folder_path)
+                for file_path in path_obj.rglob('*'):
+                    if file_path.is_file():
+                        total_files += 1
+                        try:
+                            total_size += file_path.stat().st_size
+                        except (OSError, IOError):
+                            pass
+            except PermissionError:
+                result = {'exists': True, 'readable': False}
+                if self.folder_info_cache:
+                    self.folder_info_cache.set(cache_key, result)
+                return result
 
-        return {
-            'exists': True,
-            'readable': True,
-            'total_files': total_files,
-            'total_size': total_size,
-            'size_str': size_str
-        }
+            size_str = self.format_size(total_size)
+
+            result = {
+                'exists': True,
+                'readable': True,
+                'total_files': total_files,
+                'total_size': total_size,
+                'size_str': size_str
+            }
+
+            # 缓存结果
+            if self.folder_info_cache:
+                self.folder_info_cache.set(cache_key, result)
+
+            return result
+
+        finally:
+            self.performance_monitor.end_timer('folder_info_calculation')
 
     def format_size(self, size_bytes: int) -> str:
         """格式化文件大小"""
@@ -590,10 +806,10 @@ class FileMatcher:
 
 # ================== 种子创建器 ==================
 class TorrentCreator:
-    """种子创建器 - v1.2.0优化版本"""
+    """种子创建器 - v1.3.0性能优化版本"""
 
     DEFAULT_PIECE_SIZE = "auto"
-    DEFAULT_COMMENT = "Created by Torrent Maker v1.2.0"
+    DEFAULT_COMMENT = "Created by Torrent Maker v1.3.0"
     PIECE_SIZES = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]
 
     def __init__(self, tracker_links: List[str], output_dir: str = "output",
@@ -605,6 +821,10 @@ class TorrentCreator:
         self.private = private
         self.comment = comment or self.DEFAULT_COMMENT
         self.max_workers = max_workers
+
+        # 性能监控和缓存
+        self.performance_monitor = PerformanceMonitor()
+        self.size_cache = DirectorySizeCache()
 
         if not self._check_mktorrent():
             raise TorrentCreationError("系统未安装mktorrent工具")
@@ -634,14 +854,15 @@ class TorrentCreator:
         return int(math.log2(self.PIECE_SIZES[-1] * 1024))
 
     def _get_directory_size(self, path: Path) -> int:
-        total_size = 0
+        """获取目录大小 - 使用缓存优化"""
+        self.performance_monitor.start_timer('directory_size_calculation')
         try:
-            for file_path in path.rglob('*'):
-                if file_path.is_file():
-                    total_size += file_path.stat().st_size
-        except (OSError, PermissionError):
-            pass
-        return total_size
+            size = self.size_cache.get_directory_size(path)
+            return size
+        finally:
+            duration = self.performance_monitor.end_timer('directory_size_calculation')
+            if duration > 5.0:  # 如果计算时间超过5秒，记录警告
+                logger.warning(f"目录大小计算耗时较长: {duration:.2f}s for {path}")
 
     def _sanitize_filename(self, filename: str) -> str:
         import re
@@ -677,7 +898,9 @@ class TorrentCreator:
     def create_torrent(self, source_path: Union[str, Path],
                       custom_name: str = None,
                       progress_callback = None) -> Optional[str]:
-        """创建种子文件"""
+        """创建种子文件 - 性能优化版本"""
+        self.performance_monitor.start_timer('total_torrent_creation')
+
         try:
             source_path = Path(source_path)
 
@@ -694,13 +917,18 @@ class TorrentCreator:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_file = self.output_dir / f"{torrent_name}_{timestamp}.torrent"
 
+            # 计算piece大小（带性能监控）
             piece_size = None
             if self.piece_size == "auto":
-                if source_path.is_dir():
-                    total_size = self._get_directory_size(source_path)
-                else:
-                    total_size = source_path.stat().st_size
-                piece_size = self._calculate_piece_size(total_size)
+                self.performance_monitor.start_timer('piece_size_calculation')
+                try:
+                    if source_path.is_dir():
+                        total_size = self._get_directory_size(source_path)
+                    else:
+                        total_size = source_path.stat().st_size
+                    piece_size = self._calculate_piece_size(total_size)
+                finally:
+                    self.performance_monitor.end_timer('piece_size_calculation')
             elif isinstance(self.piece_size, int):
                 # 如果用户设置的是KB值，需要转换为指数值
                 import math
@@ -716,16 +944,26 @@ class TorrentCreator:
             if progress_callback:
                 progress_callback(f"正在创建种子文件: {torrent_name}")
 
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=3600
-            )
+            # 执行mktorrent命令（带性能监控）
+            self.performance_monitor.start_timer('mktorrent_execution')
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=3600
+                )
+            finally:
+                mktorrent_duration = self.performance_monitor.end_timer('mktorrent_execution')
+                print(f"  ⏱️ mktorrent执行时间: {mktorrent_duration:.2f}s")
 
             if not output_file.exists():
                 raise TorrentCreationError("种子文件创建失败：输出文件不存在")
+
+            # 验证种子文件
+            if not self.validate_torrent(output_file):
+                raise TorrentCreationError("种子文件验证失败")
 
             if progress_callback:
                 progress_callback(f"种子文件创建成功: {output_file.name}")
@@ -743,6 +981,65 @@ class TorrentCreator:
 
         except Exception as e:
             raise TorrentCreationError(f"创建种子文件时发生未知错误: {e}")
+
+        finally:
+            total_duration = self.performance_monitor.end_timer('total_torrent_creation')
+            print(f"  📊 总耗时: {total_duration:.2f}s")
+
+    def create_torrents_batch(self, source_paths: List[Union[str, Path]],
+                             progress_callback = None) -> List[Tuple[str, Optional[str], Optional[str]]]:
+        """批量创建种子文件 - 并发处理"""
+        if not source_paths:
+            return []
+
+        results = []
+        total_count = len(source_paths)
+
+        def create_single_with_error_handling(args):
+            index, source_path = args
+            try:
+                if progress_callback:
+                    progress_callback(f"正在处理 ({index + 1}/{total_count}): {Path(source_path).name}")
+
+                result_path = self.create_torrent(source_path)
+                return (str(source_path), result_path, None)
+            except Exception as e:
+                return (str(source_path), None, str(e))
+
+        # 使用线程池并发创建种子
+        with ThreadPoolExecutor(max_workers=min(self.max_workers, total_count)) as executor:
+            # 提交所有任务
+            future_to_path = {
+                executor.submit(create_single_with_error_handling, (i, path)): path
+                for i, path in enumerate(source_paths)
+            }
+
+            # 收集结果
+            for future in as_completed(future_to_path):
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as e:
+                    source_path = future_to_path[future]
+                    results.append((str(source_path), None, str(e)))
+
+        return results
+
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """获取性能统计信息"""
+        stats = self.performance_monitor.get_all_stats()
+        cache_stats = self.size_cache.get_stats() if hasattr(self.size_cache, 'get_stats') else {}
+
+        return {
+            'performance': stats,
+            'cache': cache_stats,
+            'summary': {
+                'total_torrents_created': stats.get('total_torrent_creation', {}).get('count', 0),
+                'average_creation_time': stats.get('total_torrent_creation', {}).get('average', 0),
+                'average_mktorrent_time': stats.get('mktorrent_execution', {}).get('average', 0),
+                'average_size_calculation_time': stats.get('directory_size_calculation', {}).get('average', 0)
+            }
+        }
 
     def validate_torrent(self, torrent_path: Union[str, Path]) -> bool:
         """验证种子文件的有效性"""
@@ -816,7 +1113,7 @@ class TorrentMakerApp:
     def display_header(self):
         """显示程序头部信息"""
         print("🎬" + "=" * 60)
-        print("           Torrent Maker v1.2.0 - 高性能优化版")
+        print("           Torrent Maker v1.3.0 - 高性能优化版")
         print("           基于 mktorrent 的半自动化种子制作工具")
         print("=" * 62)
         print()
@@ -834,7 +1131,7 @@ class TorrentMakerApp:
         print("  2. ⚡ 快速制种 (直接输入路径)")
         print("  3. 📁 批量制种")
         print("  4. ⚙️  配置管理")
-        print("  5. 📊 查看统计信息")
+        print("  5. 📊 查看性能统计")
         print("  6. ❓ 帮助")
         print("  0. 🚪 退出")
         print()
@@ -1190,7 +1487,7 @@ class TorrentMakerApp:
                 elif choice == '4':
                     self.config_management()
                 elif choice == '5':
-                    print("📊 统计信息功能开发中...")
+                    self.show_performance_stats()
                 elif choice == '6':
                     self.show_help()
                 else:
@@ -1203,6 +1500,84 @@ class TorrentMakerApp:
                 break
             except Exception as e:
                 print(f"❌ 程序运行时发生错误: {e}")
+
+    def show_performance_stats(self):
+        """显示性能统计信息"""
+        print("\n📊 性能统计信息")
+        print("=" * 60)
+
+        # 获取文件匹配器的性能统计
+        if hasattr(self.matcher, 'performance_monitor'):
+            matcher_stats = self.matcher.performance_monitor.get_all_stats()
+            if matcher_stats:
+                print("🔍 搜索性能:")
+                for name, stats in matcher_stats.items():
+                    if stats:
+                        print(f"  {name}:")
+                        print(f"    执行次数: {stats['count']}")
+                        print(f"    平均耗时: {stats['average']:.3f}s")
+                        print(f"    最大耗时: {stats['max']:.3f}s")
+                        print(f"    总耗时: {stats['total']:.3f}s")
+                print()
+
+        # 获取种子创建器的性能统计
+        if hasattr(self.creator, 'performance_monitor'):
+            creator_stats = self.creator.performance_monitor.get_all_stats()
+            if creator_stats:
+                print("🛠️ 种子创建性能:")
+                for name, stats in creator_stats.items():
+                    if stats:
+                        print(f"  {name}:")
+                        print(f"    执行次数: {stats['count']}")
+                        print(f"    平均耗时: {stats['average']:.3f}s")
+                        print(f"    最大耗时: {stats['max']:.3f}s")
+                        print(f"    总耗时: {stats['total']:.3f}s")
+                print()
+
+        # 获取缓存统计
+        if hasattr(self.matcher, 'cache') and self.matcher.cache:
+            cache_stats = self.matcher.cache.get_stats()
+            if cache_stats:
+                print("💾 缓存统计:")
+                print(f"  总缓存项: {cache_stats['total_items']}")
+                print(f"  有效缓存项: {cache_stats['valid_items']}")
+                print(f"  过期缓存项: {cache_stats['expired_items']}")
+                print()
+
+        # 显示优化建议
+        print("💡 性能优化建议:")
+        suggestions = self._generate_performance_suggestions()
+        if suggestions:
+            for i, suggestion in enumerate(suggestions, 1):
+                print(f"  {i}. {suggestion}")
+        else:
+            print("  当前性能表现良好，无需特别优化")
+
+        print("=" * 60)
+
+    def _generate_performance_suggestions(self) -> List[str]:
+        """生成性能优化建议"""
+        suggestions = []
+
+        # 检查搜索性能
+        if hasattr(self.matcher, 'performance_monitor'):
+            search_stats = self.matcher.performance_monitor.get_stats('fuzzy_search')
+            if search_stats and search_stats.get('average', 0) > 2.0:
+                suggestions.append("搜索耗时较长，建议增加缓存时间或减少搜索深度")
+
+        # 检查种子创建性能
+        if hasattr(self.creator, 'performance_monitor'):
+            creation_stats = self.creator.performance_monitor.get_stats('total_torrent_creation')
+            if creation_stats and creation_stats.get('average', 0) > 30.0:
+                suggestions.append("种子创建耗时较长，建议检查磁盘性能或减少文件数量")
+
+        # 检查缓存使用情况
+        if hasattr(self.matcher, 'cache') and self.matcher.cache:
+            cache_stats = self.matcher.cache.get_stats()
+            if cache_stats and cache_stats.get('valid_items', 0) == 0:
+                suggestions.append("缓存未被有效利用，建议检查缓存配置")
+
+        return suggestions
 
     def show_help(self):
         """显示帮助信息"""
@@ -1221,6 +1596,7 @@ class TorrentMakerApp:
         print("  - 多线程并行处理")
         print("  - 智能缓存系统")
         print("  - 内存使用优化")
+        print("  - 实时性能监控")
         print("=" * 50)
 
 
