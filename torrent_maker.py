@@ -842,6 +842,15 @@ class TorrentMakerApp:
 
                 if not results:
                     print(f"❌ 未找到匹配的文件夹 (搜索耗时: {search_time:.3f}s)")
+                    # 询问是否继续搜索
+                    while True:
+                        continue_choice = input("是否继续搜索其他内容？(y/n): ").strip().lower()
+                        if continue_choice in ['n', 'no', '否']:
+                            return  # 返回主菜单
+                        elif continue_choice in ['y', 'yes', '是', '']:
+                            break  # 继续搜索循环
+                        else:
+                            print("请输入 y(是) 或 n(否)")
                     continue
 
                 print(f"✅ 找到 {len(results)} 个匹配结果 (搜索耗时: {search_time:.3f}s)")
@@ -857,8 +866,17 @@ class TorrentMakerApp:
                     print()
 
                 # 选择文件夹
-                choice = input("请选择要制作种子的文件夹编号 (支持多选，如: 1,3,5): ").strip()
+                choice = input("请选择要制作种子的文件夹编号 (支持多选，如: 1,3,5，回车跳过): ").strip()
                 if not choice:
+                    # 询问是否继续搜索
+                    while True:
+                        continue_choice = input("是否继续搜索其他内容？(y/n): ").strip().lower()
+                        if continue_choice in ['n', 'no', '否']:
+                            return  # 返回主菜单
+                        elif continue_choice in ['y', 'yes', '是', '']:
+                            break  # 继续搜索循环
+                        else:
+                            print("请输入 y(是) 或 n(否)")
                     continue
 
                 # 解析选择
@@ -873,6 +891,15 @@ class TorrentMakerApp:
                             selected_indices.append(int(part))
                 except ValueError:
                     print("❌ 无效的选择格式")
+                    # 询问是否继续搜索
+                    while True:
+                        continue_choice = input("是否继续搜索其他内容？(y/n): ").strip().lower()
+                        if continue_choice in ['n', 'no', '否']:
+                            return  # 返回主菜单
+                        elif continue_choice in ['y', 'yes', '是', '']:
+                            break  # 继续搜索循环
+                        else:
+                            print("请输入 y(是) 或 n(否)")
                     continue
 
                 # 批量创建种子
@@ -885,8 +912,27 @@ class TorrentMakerApp:
 
                 print(f"\n🎉 批量制种完成: 成功 {success_count}/{len(selected_indices)}")
 
+                # 询问是否继续搜索
+                while True:
+                    continue_choice = input("\n是否继续搜索其他内容？(y/n): ").strip().lower()
+                    if continue_choice in ['n', 'no', '否']:
+                        return  # 返回主菜单
+                    elif continue_choice in ['y', 'yes', '是', '']:
+                        break  # 继续搜索循环
+                    else:
+                        print("请输入 y(是) 或 n(否)")
+
             except Exception as e:
                 print(f"❌ 搜索过程中发生错误: {e}")
+                # 发生错误时也询问是否继续
+                while True:
+                    continue_choice = input("\n是否继续搜索其他内容？(y/n): ").strip().lower()
+                    if continue_choice in ['n', 'no', '否']:
+                        return  # 返回主菜单
+                    elif continue_choice in ['y', 'yes', '是', '']:
+                        break  # 继续搜索循环
+                    else:
+                        print("请输入 y(是) 或 n(否)")
 
     def _create_single_torrent(self, folder_info: Dict[str, Any]) -> bool:
         """创建单个种子文件"""
@@ -945,6 +991,157 @@ class TorrentMakerApp:
 
         print(f"\n🎉 快速制种完成: 成功 {success_count}/{len(paths)}")
 
+    def config_management(self):
+        """配置管理"""
+        while True:
+            print("\n⚙️ 配置管理")
+            print("=" * 40)
+            print("1. 📁 查看当前配置")
+            print("2. 🔧 设置资源文件夹")
+            print("3. 📂 设置输出文件夹")
+            print("4. 🌐 管理 Tracker")
+            print("5. 🔄 重新加载配置")
+            print("0. 🔙 返回主菜单")
+            print()
+
+            choice = input("请选择操作 (0-5): ").strip()
+
+            if choice == '0':
+                break
+            elif choice == '1':
+                self._show_current_config()
+            elif choice == '2':
+                self._set_resource_folder()
+            elif choice == '3':
+                self._set_output_folder()
+            elif choice == '4':
+                self._manage_trackers()
+            elif choice == '5':
+                self._reload_config()
+            else:
+                print("❌ 无效选择，请重新输入")
+
+            input("\n按回车键继续...")
+
+    def _show_current_config(self):
+        """显示当前配置"""
+        print("\n📋 当前配置信息")
+        print("=" * 40)
+        print(f"📁 资源文件夹: {self.config.get_resource_folder()}")
+        print(f"📂 输出文件夹: {self.config.get_output_folder()}")
+        print(f"🌐 Tracker 数量: {len(self.config.get_trackers())}")
+        print(f"🔧 搜索容错率: {self.config.get_setting('file_search_tolerance', 60)}%")
+        print(f"📊 最大搜索结果: {self.config.get_setting('max_search_results', 10)}")
+        print(f"💾 缓存状态: {'启用' if self.config.get_setting('enable_cache', True) else '禁用'}")
+
+    def _set_resource_folder(self):
+        """设置资源文件夹"""
+        print(f"\n📁 当前资源文件夹: {self.config.get_resource_folder()}")
+        new_path = input("请输入新的资源文件夹路径 (回车取消): ").strip()
+        if new_path:
+            if self.config.set_resource_folder(new_path):
+                print("✅ 资源文件夹设置成功")
+                # 重新初始化文件匹配器
+                self.matcher = FileMatcher(
+                    self.config.get_resource_folder(),
+                    enable_cache=self.config.get_setting('enable_cache', True)
+                )
+            else:
+                print("❌ 设置失败，请检查路径是否存在")
+
+    def _set_output_folder(self):
+        """设置输出文件夹"""
+        print(f"\n📂 当前输出文件夹: {self.config.get_output_folder()}")
+        new_path = input("请输入新的输出文件夹路径 (回车取消): ").strip()
+        if new_path:
+            if self.config.set_output_folder(new_path):
+                print("✅ 输出文件夹设置成功")
+                # 重新初始化种子创建器
+                self.creator = TorrentCreator(
+                    self.config.get_trackers(),
+                    self.config.get_output_folder()
+                )
+            else:
+                print("❌ 设置失败")
+
+    def _manage_trackers(self):
+        """管理 Tracker"""
+        while True:
+            print("\n🌐 Tracker 管理")
+            print("=" * 30)
+            trackers = self.config.get_trackers()
+            if trackers:
+                for i, tracker in enumerate(trackers, 1):
+                    print(f"  {i:2d}. {tracker}")
+            else:
+                print("  (无 Tracker)")
+
+            print("\n操作选项:")
+            print("1. ➕ 添加 Tracker")
+            print("2. ➖ 删除 Tracker")
+            print("0. 🔙 返回")
+
+            choice = input("\n请选择操作 (0-2): ").strip()
+
+            if choice == '0':
+                break
+            elif choice == '1':
+                tracker_url = input("请输入 Tracker URL: ").strip()
+                if tracker_url:
+                    if self.config.add_tracker(tracker_url):
+                        print("✅ Tracker 添加成功")
+                        # 更新种子创建器的 tracker 列表
+                        self.creator = TorrentCreator(
+                            self.config.get_trackers(),
+                            self.config.get_output_folder()
+                        )
+                    else:
+                        print("❌ 添加失败，可能是无效URL或已存在")
+            elif choice == '2':
+                if not trackers:
+                    print("❌ 没有可删除的 Tracker")
+                    continue
+                try:
+                    idx = int(input("请输入要删除的 Tracker 编号: ").strip())
+                    if 1 <= idx <= len(trackers):
+                        tracker_to_remove = trackers[idx - 1]
+                        if self.config.remove_tracker(tracker_to_remove):
+                            print("✅ Tracker 删除成功")
+                            # 更新种子创建器的 tracker 列表
+                            self.creator = TorrentCreator(
+                                self.config.get_trackers(),
+                                self.config.get_output_folder()
+                            )
+                        else:
+                            print("❌ 删除失败")
+                    else:
+                        print("❌ 无效的编号")
+                except ValueError:
+                    print("❌ 请输入有效的数字")
+            else:
+                print("❌ 无效选择")
+
+    def _reload_config(self):
+        """重新加载配置"""
+        try:
+            # 重新初始化配置管理器
+            self.config = ConfigManager()
+
+            # 重新初始化其他组件
+            self.matcher = FileMatcher(
+                self.config.get_resource_folder(),
+                enable_cache=self.config.get_setting('enable_cache', True)
+            )
+
+            self.creator = TorrentCreator(
+                self.config.get_trackers(),
+                self.config.get_output_folder()
+            )
+
+            print("✅ 配置重新加载成功")
+        except Exception as e:
+            print(f"❌ 重新加载配置失败: {e}")
+
     def run(self):
         """运行主程序"""
         self.display_header()
@@ -964,7 +1161,7 @@ class TorrentMakerApp:
                 elif choice == '3':
                     print("📦 批量制种功能开发中...")
                 elif choice == '4':
-                    print("⚙️ 配置管理功能开发中...")
+                    self.config_management()
                 elif choice == '5':
                     print("📊 统计信息功能开发中...")
                 elif choice == '6':
