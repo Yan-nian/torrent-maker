@@ -5,7 +5,7 @@
 Torrent Maker - 单文件版本 v1.4.0
 基于 mktorrent 的高性能半自动化种子制作工具
 
-🚀 v1.3.1 修复更新:
+🚀 v1.4.0 修复更新:
 - 🔧 修复 ConfigManager get_setting 方法错误
 - 📦 重构批量制种功能，消除重复
 - ⚙️ 优化配置管理界面，增强用户体验
@@ -222,7 +222,7 @@ class TorrentCreationError(Exception):
 
 # ================== 配置管理器 ==================
 class ConfigManager:
-    """配置管理器 - v1.3.1修复优化版本"""
+    """配置管理器 - v1.4.0修复优化版本"""
     
     DEFAULT_SETTINGS = {
         "resource_folder": "~/Downloads",
@@ -404,7 +404,7 @@ class ConfigManager:
 
 # ================== 文件匹配器 ==================
 class FileMatcher:
-    """文件匹配器 - v1.3.1修复优化版本"""
+    """文件匹配器 - v1.4.0修复优化版本"""
     
     VIDEO_EXTENSIONS = {
         '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', 
@@ -837,7 +837,7 @@ class FileMatcher:
 
 # ================== 种子创建器 ==================
 class TorrentCreator:
-    """种子创建器 - v1.3.1修复优化版本"""
+    """种子创建器 - v1.4.0修复优化版本"""
 
     DEFAULT_PIECE_SIZE = "auto"
     DEFAULT_COMMENT = "Created by Torrent Maker v1.4.0"
@@ -1257,7 +1257,7 @@ class SearchHistory:
 
 # ================== 主程序 ==================
 class TorrentMakerApp:
-    """Torrent Maker 主应用程序 - v1.3.1"""
+    """Torrent Maker 主应用程序 - v1.4.0"""
 
     def __init__(self):
         self.config = ConfigManager()
@@ -1299,11 +1299,11 @@ class TorrentMakerApp:
     def display_header(self):
         """显示程序头部信息"""
         print("🎬" + "=" * 60)
-        print("           Torrent Maker v1.3.1 - 修复优化版")
+        print("           Torrent Maker v1.4.0 - 修复优化版")
         print("           基于 mktorrent 的半自动化种子制作工具")
         print("=" * 62)
         print()
-        print("🔧 v1.3.1 修复更新:")
+        print("🔧 v1.4.0 修复更新:")
         print("  🛠️ 修复 ConfigManager get_setting 方法错误")
         print("  📦 重构批量制种功能，消除重复")
         print("  ⚙️ 优化配置管理界面，增强用户体验")
@@ -2046,7 +2046,7 @@ class TorrentMakerApp:
                 choice = input("请选择操作 (0-6): ").strip()
 
                 if choice == '0':
-                    print("👋 感谢使用 Torrent Maker v1.3.1！")
+                    print("👋 感谢使用 Torrent Maker v1.4.0！")
                     break
                 elif choice == '1':
                     self.search_and_create()

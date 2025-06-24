@@ -21,12 +21,44 @@
                     "replacement": "🚀 v{version} 重大更新:"
                 },
                 {
+                    "pattern": "🚀 v(\\d+\\.\\d+\\.\\d+) 修复更新:",
+                    "replacement": "🚀 v{version} 修复更新:"
+                },
+                {
                     "pattern": "Torrent Maker v(\\d+\\.\\d+\\.\\d+) - 高性能优化版",
                     "replacement": "Torrent Maker v{version} - 高性能优化版"
                 },
                 {
                     "pattern": "种子创建器 - v(\\d+\\.\\d+\\.\\d+)性能优化版本",
                     "replacement": "种子创建器 - v{version}性能优化版本"
+                },
+                {
+                    "pattern": "配置管理器 - v(\\d+\\.\\d+\\.\\d+)修复优化版本",
+                    "replacement": "配置管理器 - v{version}修复优化版本"
+                },
+                {
+                    "pattern": "文件匹配器 - v(\\d+\\.\\d+\\.\\d+)修复优化版本",
+                    "replacement": "文件匹配器 - v{version}修复优化版本"
+                },
+                {
+                    "pattern": "种子创建器 - v(\\d+\\.\\d+\\.\\d+)修复优化版本",
+                    "replacement": "种子创建器 - v{version}修复优化版本"
+                },
+                {
+                    "pattern": "Torrent Maker 主应用程序 - v(\\d+\\.\\d+\\.\\d+)",
+                    "replacement": "Torrent Maker 主应用程序 - v{version}"
+                },
+                {
+                    "pattern": "Torrent Maker v(\\d+\\.\\d+\\.\\d+) - 修复优化版",
+                    "replacement": "Torrent Maker v{version} - 修复优化版"
+                },
+                {
+                    "pattern": "🔧 v(\\d+\\.\\d+\\.\\d+) 修复更新:",
+                    "replacement": "🔧 v{version} 修复更新:"
+                },
+                {
+                    "pattern": "感谢使用 Torrent Maker v(\\d+\\.\\d+\\.\\d+)！",
+                    "replacement": "感谢使用 Torrent Maker v{version}！"
                 }
             ]
         },
