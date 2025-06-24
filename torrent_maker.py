@@ -1223,6 +1223,173 @@ class TorrentMakerApp:
         print(f"   - {self.config_manager.config_dir}")
         print("=" * 60)
 
+    def manage_config(self):
+        """查看当前配置"""
+        print("\n⚙️ 当前配置信息")
+        print("=" * 50)
+        print(f"📁 资源文件夹: {self.config_manager.get_resource_folder()}")
+        print(f"📂 输出文件夹: {self.config_manager.get_output_folder()}")
+        print(f"🌐 Tracker 数量: {len(self.config_manager.get_trackers())}")
+        print()
+        
+        print("🌐 配置的 Tracker 列表:")
+        trackers = self.config_manager.get_trackers()
+        if trackers:
+            for i, tracker in enumerate(trackers, 1):
+                print(f"  {i}. {tracker}")
+        else:
+            print("  暂无配置的 Tracker")
+        print("=" * 50)
+
+    def set_resource_folder(self):
+        """设置资源文件夹"""
+        print("\n📁 设置资源文件夹")
+        print("当前资源文件夹:", self.config_manager.get_resource_folder())
+        print()
+        
+        new_path = input("请输入新的资源文件夹路径 (直接回车取消): ").strip()
+        if not new_path:
+            print("❌ 取消设置")
+            return
+            
+        expanded_path = os.path.expanduser(new_path)
+        if not os.path.exists(expanded_path):
+            print(f"❌ 路径不存在: {expanded_path}")
+            create = input("是否创建此目录? (y/N): ").strip().lower()
+            if create in ['y', 'yes', '是']:
+                try:
+                    os.makedirs(expanded_path)
+                    print(f"✅ 成功创建目录: {expanded_path}")
+                except Exception as e:
+                    print(f"❌ 创建目录失败: {e}")
+                    return
+            else:
+                return
+        
+        if not os.path.isdir(expanded_path):
+            print(f"❌ 路径不是目录: {expanded_path}")
+            return
+            
+        self.config_manager.set_resource_folder(expanded_path)
+        print(f"✅ 资源文件夹已设置为: {expanded_path}")
+
+    def set_output_folder(self):
+        """设置输出文件夹"""
+        print("\n📂 设置输出文件夹")
+        print("当前输出文件夹:", self.config_manager.get_output_folder())
+        print()
+        
+        new_path = input("请输入新的输出文件夹路径 (直接回车取消): ").strip()
+        if not new_path:
+            print("❌ 取消设置")
+            return
+            
+        expanded_path = os.path.expanduser(new_path)
+        if not os.path.exists(expanded_path):
+            print(f"❌ 路径不存在: {expanded_path}")
+            create = input("是否创建此目录? (y/N): ").strip().lower()
+            if create in ['y', 'yes', '是']:
+                try:
+                    os.makedirs(expanded_path)
+                    print(f"✅ 成功创建目录: {expanded_path}")
+                except Exception as e:
+                    print(f"❌ 创建目录失败: {e}")
+                    return
+            else:
+                return
+        
+        if not os.path.isdir(expanded_path):
+            print(f"❌ 路径不是目录: {expanded_path}")
+            return
+            
+        self.config_manager.set_output_folder(expanded_path)
+        print(f"✅ 输出文件夹已设置为: {expanded_path}")
+
+    def manage_trackers(self):
+        """管理 Tracker"""
+        while True:
+            print("\n🌐 Tracker 管理")
+            print("=" * 40)
+            
+            trackers = self.config_manager.get_trackers()
+            if trackers:
+                print("当前配置的 Tracker:")
+                for i, tracker in enumerate(trackers, 1):
+                    print(f"  {i}. {tracker}")
+            else:
+                print("暂无配置的 Tracker")
+            
+            print()
+            print("操作选项:")
+            print("1. 添加 Tracker")
+            print("2. 删除 Tracker") 
+            print("0. 返回主菜单")
+            
+            choice = input("请选择操作: ").strip()
+            
+            if choice == '0':
+                break
+            elif choice == '1':
+                self.add_tracker()
+            elif choice == '2':
+                self.remove_tracker()
+            else:
+                print("❌ 无效选择")
+
+    def add_tracker(self):
+        """添加 Tracker"""
+        print("\n➕ 添加新的 Tracker")
+        tracker_url = input("请输入 Tracker URL: ").strip()
+        
+        if not tracker_url:
+            print("❌ URL 不能为空")
+            return
+            
+        if self.config_manager.add_tracker(tracker_url):
+            print(f"✅ 成功添加 Tracker: {tracker_url}")
+        else:
+            print(f"❌ Tracker 已存在: {tracker_url}")
+
+    def remove_tracker(self):
+        """删除 Tracker"""
+        trackers = self.config_manager.get_trackers()
+        if not trackers:
+            print("❌ 没有可删除的 Tracker")
+            return
+            
+        print("\n🗑️ 删除 Tracker")
+        print("请选择要删除的 Tracker:")
+        for i, tracker in enumerate(trackers, 1):
+            print(f"  {i}. {tracker}")
+        
+        try:
+            choice = int(input("请输入序号 (0取消): ").strip())
+            if choice == 0:
+                print("❌ 取消删除")
+                return
+            elif 1 <= choice <= len(trackers):
+                tracker_to_remove = trackers[choice - 1]
+                if self.config_manager.remove_tracker(tracker_to_remove):
+                    print(f"✅ 成功删除 Tracker: {tracker_to_remove}")
+                else:
+                    print(f"❌ 删除失败: {tracker_to_remove}")
+            else:
+                print("❌ 无效的序号")
+        except ValueError:
+            print("❌ 请输入有效的数字")
+
+    def show_detailed_episodes(self, folder_info):
+        """显示详细剧集信息"""
+        print(f"\n📺 {folder_info['name']} 详细剧集信息")
+        print("=" * 60)
+        
+        # 使用文件匹配器获取详细剧集信息
+        file_matcher = FileMatcher(os.path.dirname(folder_info['path']))
+        detailed_episodes = file_matcher.get_folder_episodes_detail(folder_info['path'])
+        
+        print(detailed_episodes)
+        print("=" * 60)
+
     def run(self):
         """运行主程序"""
         self.display_banner()
