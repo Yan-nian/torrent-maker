@@ -5,7 +5,7 @@
 
 set -e  # 遇到错误时退出
 
-VERSION="v1.0.2"  # 当前版本
+VERSION="v1.1.0"  # 当前版本
 REPO="Yan-nian/torrent-maker"
 INSTALL_DIR="$HOME/.local/bin"
 CONFIG_DIR="$HOME/.torrent_maker"
