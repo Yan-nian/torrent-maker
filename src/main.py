@@ -24,7 +24,7 @@ class TorrentMakerApp:
         print("           🎬 种子制作工具 Torrent Maker 🎬")
         print("=" * 60)
         print("   用于半自动化制作影视剧整季种子文件")
-        print("   版本：1.3.0 | 许可证：MIT")
+        print("   版本：1.3.1 | 许可证：MIT")
         print("=" * 60)
 
     def display_menu(self):

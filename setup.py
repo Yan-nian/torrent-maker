@@ -8,7 +8,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name='torrent-maker',
-    version='1.3.0',
+    version='1.3.1',
     author='Torrent Maker Team',
     author_email='torrent-maker@example.com',
     description='基于 mktorrent 的半自动化影视剧种子制作工具',

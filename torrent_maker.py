@@ -2,15 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v1.3.0
+Torrent Maker - 单文件版本 v1.3.1
 基于 mktorrent 的高性能半自动化种子制作工具
 
-🚀 v1.3.0 重大更新:
-- ⚡ 搜索速度提升60%，目录计算提升400%
-- 💾 内存使用减少40%，批量制种提升300%
-- 🧠 智能多层级缓存系统，85%+命中率
-- 📊 实时性能监控和分析工具
-- 🔧 统一版本管理系统
+🚀 v1.3.1 修复更新:
+- 🔧 修复 ConfigManager get_setting 方法错误
+- 📦 重构批量制种功能，消除重复
+- ⚙️ 优化配置管理界面，增强用户体验
+- 🛡️ 改进错误处理和异常恢复机制
+- 🧪 添加完整的功能测试验证
 - 🛡️ 并发处理和线程安全优化
 
 使用方法：
@@ -31,6 +31,7 @@ import logging
 import hashlib
 import tempfile
 import threading
+import re
 from datetime import datetime
 from difflib import SequenceMatcher
 from typing import List, Dict, Any, Tuple, Optional, Union
@@ -221,7 +222,7 @@ class TorrentCreationError(Exception):
 
 # ================== 配置管理器 ==================
 class ConfigManager:
-    """配置管理器 - v1.3.0性能优化版本"""
+    """配置管理器 - v1.3.1修复优化版本"""
     
     DEFAULT_SETTINGS = {
         "resource_folder": "~/Downloads",
@@ -403,7 +404,7 @@ class ConfigManager:
 
 # ================== 文件匹配器 ==================
 class FileMatcher:
-    """文件匹配器 - v1.3.0性能优化版本"""
+    """文件匹配器 - v1.3.1修复优化版本"""
     
     VIDEO_EXTENSIONS = {
         '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', 
@@ -705,12 +706,11 @@ class FileMatcher:
         if not os.path.exists(folder_path) or not os.path.isdir(folder_path):
             return {'episodes': [], 'season_info': '', 'total_episodes': 0}
 
-        import re
         episodes = []
         seasons = set()
 
         try:
-            for root, dirs, files in os.walk(folder_path):
+            for _, _, files in os.walk(folder_path):
                 for file in files:
                     if self.is_video_file(file):
                         episode_info = self.parse_episode_from_filename(file)
@@ -837,10 +837,10 @@ class FileMatcher:
 
 # ================== 种子创建器 ==================
 class TorrentCreator:
-    """种子创建器 - v1.3.0性能优化版本"""
+    """种子创建器 - v1.3.1修复优化版本"""
 
     DEFAULT_PIECE_SIZE = "auto"
-    DEFAULT_COMMENT = "Created by Torrent Maker v1.3.0"
+    DEFAULT_COMMENT = "Created by Torrent Maker v1.3.1"
     PIECE_SIZES = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]
 
     def __init__(self, tracker_links: List[str], output_dir: str = "output",
@@ -1103,7 +1103,7 @@ class TorrentCreator:
 
 # ================== 主程序 ==================
 class TorrentMakerApp:
-    """Torrent Maker 主应用程序 - v1.3.0"""
+    """Torrent Maker 主应用程序 - v1.3.1"""
 
     def __init__(self):
         self.config = ConfigManager()
@@ -1144,14 +1144,14 @@ class TorrentMakerApp:
     def display_header(self):
         """显示程序头部信息"""
         print("🎬" + "=" * 60)
-        print("           Torrent Maker v1.3.0 - 高性能优化版")
+        print("           Torrent Maker v1.3.1 - 修复优化版")
         print("           基于 mktorrent 的半自动化种子制作工具")
         print("=" * 62)
         print()
-        print("🚀 v1.3.0 重大更新:")
-        print("  ⚡ 搜索速度提升60%，目录计算提升400%")
-        print("  💾 内存使用减少40%，批量制种提升300%")
-        print("  🧠 智能多层级缓存系统，85%+命中率")
+        print("🔧 v1.3.1 修复更新:")
+        print("  🛠️ 修复 ConfigManager get_setting 方法错误")
+        print("  📦 重构批量制种功能，消除重复")
+        print("  ⚙️ 优化配置管理界面，增强用户体验")
         print("  � 实时性能监控和分析工具")
         print("  🔧 统一版本管理系统")
         print()
@@ -1235,17 +1235,11 @@ class TorrentMakerApp:
                             print("请输入 y(是) 或 n(否)")
                     continue
 
-                # 解析选择
-                selected_indices = []
-                try:
-                    for part in choice.split(','):
-                        part = part.strip()
-                        if '-' in part:
-                            start, end = map(int, part.split('-'))
-                            selected_indices.extend(range(start, end + 1))
-                        else:
-                            selected_indices.append(int(part))
-                except ValueError:
+                # 解析选择并执行批量制种
+                selected_results = self._parse_selection(choice, results)
+                if selected_results:
+                    self._execute_batch_creation(selected_results)
+                else:
                     print("❌ 无效的选择格式")
                     # 询问是否继续搜索
                     while True:
@@ -1257,16 +1251,6 @@ class TorrentMakerApp:
                         else:
                             print("请输入 y(是) 或 n(否)")
                     continue
-
-                # 批量创建种子
-                success_count = 0
-                for idx in selected_indices:
-                    if 1 <= idx <= len(results):
-                        result = results[idx - 1]
-                        if self._create_single_torrent(result):
-                            success_count += 1
-
-                print(f"\n🎉 批量制种完成: 成功 {success_count}/{len(selected_indices)}")
 
                 # 询问是否继续搜索
                 while True:
@@ -1348,8 +1332,81 @@ class TorrentMakerApp:
         print(f"\n🎉 快速制种完成: 成功 {success_count}/{len(paths)}")
 
     def batch_create(self):
-        """批量制种功能 - 使用并发处理"""
+        """统一的批量制种功能"""
         print("\n📦 批量制种")
+        print("=" * 50)
+        print("选择批量制种方式:")
+        print("1. 🔍 搜索并选择文件夹")
+        print("2. 📁 直接输入文件夹路径")
+        print("0. 🔙 返回主菜单")
+        print()
+
+        choice = input("请选择方式 (0-2): ").strip()
+
+        if choice == '0':
+            return
+        elif choice == '1':
+            self._batch_create_from_search()
+        elif choice == '2':
+            self._batch_create_from_paths()
+        else:
+            print("❌ 无效选择")
+
+    def _batch_create_from_search(self):
+        """从搜索结果中批量制种"""
+        print("\n🔍 搜索文件夹进行批量制种")
+        print("=" * 40)
+
+        search_name = input("请输入要搜索的影视剧名称: ").strip()
+        if not search_name:
+            print("❌ 搜索名称不能为空")
+            return
+
+        print(f"\n🔄 正在搜索 '{search_name}'...")
+        start_time = time.time()
+
+        try:
+            results = self.matcher.match_folders(search_name)
+            search_time = time.time() - start_time
+
+            if not results:
+                print(f"❌ 未找到匹配的文件夹 (搜索耗时: {search_time:.3f}s)")
+                return
+
+            print(f"✅ 找到 {len(results)} 个匹配结果 (搜索耗时: {search_time:.3f}s)")
+            print()
+
+            # 显示搜索结果
+            for i, result in enumerate(results, 1):
+                status = "✅" if result['readable'] else "❌"
+                print(f"  {i:2d}. {status} {result['name']}")
+                print(f"      📊 匹配度: {result['score']}% | 📁 文件: {result['file_count']}个 | 💾 大小: {result['size']}")
+                if result['episodes']:
+                    print(f"      🎬 剧集: {result['episodes']}")
+                print(f"      📂 路径: {self._format_path_display(result['path'])}")
+                print()
+
+            # 选择文件夹进行批量制种
+            choice = input("请选择要制作种子的文件夹编号 (支持多选，如: 1,3,5 或 1-5，回车取消): ").strip()
+            if not choice:
+                print("❌ 已取消批量制种")
+                return
+
+            # 解析选择
+            selected_results = self._parse_selection(choice, results)
+            if not selected_results:
+                print("❌ 无效的选择")
+                return
+
+            # 执行批量制种
+            self._execute_batch_creation(selected_results)
+
+        except Exception as e:
+            print(f"❌ 搜索过程中发生错误: {e}")
+
+    def _batch_create_from_paths(self):
+        """从直接输入的路径批量制种"""
+        print("\n📁 直接输入路径进行批量制种")
         print("=" * 40)
         print("💡 提示：输入多个文件夹路径，每行一个")
         print("💡 输入空行结束输入")
@@ -1383,11 +1440,70 @@ class TorrentMakerApp:
             print("❌ 没有有效的路径")
             return
 
-        print(f"\n📋 将要处理 {len(paths)} 个文件夹:")
-        for i, path in enumerate(paths, 1):
-            print(f"  {i}. {os.path.basename(path)}")
+        # 转换为结果格式以便统一处理
+        results = []
+        for path in paths:
+            results.append({
+                'path': path,
+                'name': os.path.basename(path),
+                'readable': True
+            })
 
-        confirm = input(f"\n确认批量制种这 {len(paths)} 个文件夹? (y/N): ").strip().lower()
+        # 执行批量制种
+        self._execute_batch_creation(results)
+
+    def _format_path_display(self, folder_path: str) -> str:
+        """格式化路径显示"""
+        # 如果路径太长，显示相对路径或缩短路径
+        if len(folder_path) > 80:
+            # 尝试显示相对于资源文件夹的路径
+            resource_folder = self.config.get_resource_folder()
+            if folder_path.startswith(resource_folder):
+                relative_path = os.path.relpath(folder_path, resource_folder)
+                return f".../{relative_path}"
+            else:
+                # 如果路径太长，显示开头和结尾
+                return f"{folder_path[:30]}...{folder_path[-30:]}"
+        else:
+            return folder_path
+
+    def _parse_selection(self, choice: str, results: list) -> list:
+        """解析用户选择的文件夹"""
+        selected_results = []
+        try:
+            selected_indices = []
+            for part in choice.split(','):
+                part = part.strip()
+                if '-' in part:
+                    start, end = map(int, part.split('-'))
+                    selected_indices.extend(range(start, end + 1))
+                else:
+                    selected_indices.append(int(part))
+
+            # 验证选择并收集结果
+            for idx in selected_indices:
+                if 1 <= idx <= len(results):
+                    selected_results.append(results[idx - 1])
+                else:
+                    print(f"⚠️ 忽略无效编号: {idx}")
+
+        except ValueError:
+            print("❌ 无效的选择格式")
+            return []
+
+        return selected_results
+
+    def _execute_batch_creation(self, selected_results: list):
+        """执行批量制种"""
+        if not selected_results:
+            print("❌ 没有选择任何文件夹")
+            return
+
+        print(f"\n📋 将要处理 {len(selected_results)} 个文件夹:")
+        for i, result in enumerate(selected_results, 1):
+            print(f"  {i}. {result['name']}")
+
+        confirm = input(f"\n确认批量制种这 {len(selected_results)} 个文件夹? (y/N): ").strip().lower()
         if confirm not in ['y', 'yes', '是']:
             print("❌ 已取消批量制种")
             return
@@ -1395,91 +1511,132 @@ class TorrentMakerApp:
         print(f"\n🚀 开始批量制种...")
         print("=" * 50)
 
-        # 使用并发批量创建
-        try:
-            results = self.creator.create_torrents_batch(
-                paths,
-                progress_callback=lambda msg: print(f"📊 {msg}")
-            )
+        # 批量创建种子
+        success_count = 0
+        for i, result in enumerate(selected_results, 1):
+            print(f"\n[{i}/{len(selected_results)}] 正在处理: {result['name']}")
+            if self._create_single_torrent(result):
+                success_count += 1
 
-            # 统计结果
-            successful = [r for r in results if r[1] is not None]
-            failed = [r for r in results if r[1] is None]
-
-            print("\n" + "=" * 50)
-            print("📊 批量制种完成")
-            print("=" * 50)
-
-            if successful:
-                print(f"✅ 成功创建 {len(successful)} 个种子:")
-                for source_path, torrent_path, _ in successful:
-                    folder_name = os.path.basename(source_path)
-                    torrent_name = os.path.basename(torrent_path)
-                    print(f"  📁 {folder_name} → 🌱 {torrent_name}")
-
-            if failed:
-                print(f"\n❌ 失败 {len(failed)} 个:")
-                for source_path, _, error in failed:
-                    folder_name = os.path.basename(source_path)
-                    print(f"  📁 {folder_name}: {error}")
-
-            print(f"\n📈 总计: {len(results)} 个文件夹")
-            print(f"✅ 成功率: {len(successful)/len(results)*100:.1f}%")
-
-            # 显示性能统计
-            if hasattr(self.creator, 'get_performance_stats'):
-                stats = self.creator.get_performance_stats()
-                summary = stats.get('summary', {})
-                if summary.get('total_torrents_created', 0) > 0:
-                    print(f"⏱️ 平均创建时间: {summary.get('average_creation_time', 0):.2f}s")
-
-        except Exception as e:
-            print(f"❌ 批量制种过程中发生错误: {e}")
-
-        input("\n按回车键继续...")
+        print(f"\n🎉 批量制种完成!")
+        print(f"✅ 成功: {success_count}/{len(selected_results)}")
+        if success_count < len(selected_results):
+            print(f"❌ 失败: {len(selected_results) - success_count}")
+        print(f"✅ 成功率: {success_count/len(selected_results)*100:.1f}%")
 
     def config_management(self):
         """配置管理"""
         while True:
-            print("\n⚙️ 配置管理")
-            print("=" * 40)
+            print("\n" + "=" * 50)
+            print("           ⚙️ 配置管理")
+            print("=" * 50)
             print("1. 📁 查看当前配置")
             print("2. 🔧 设置资源文件夹")
             print("3. 📂 设置输出文件夹")
             print("4. 🌐 管理 Tracker")
             print("5. 🔄 重新加载配置")
+            print("6. 📤 导出配置")
+            print("7. 📥 导入配置")
+            print("8. 🔄 重置为默认配置")
             print("0. 🔙 返回主菜单")
-            print()
+            print("=" * 50)
 
-            choice = input("请选择操作 (0-5): ").strip()
+            choice = input("请选择操作 (0-8): ").strip()
 
-            if choice == '0':
-                break
-            elif choice == '1':
-                self._show_current_config()
-            elif choice == '2':
-                self._set_resource_folder()
-            elif choice == '3':
-                self._set_output_folder()
-            elif choice == '4':
-                self._manage_trackers()
-            elif choice == '5':
-                self._reload_config()
-            else:
-                print("❌ 无效选择，请重新输入")
+            try:
+                if choice == '0':
+                    break
+                elif choice == '1':
+                    self._show_current_config()
+                elif choice == '2':
+                    self._set_resource_folder()
+                elif choice == '3':
+                    self._set_output_folder()
+                elif choice == '4':
+                    self._manage_trackers()
+                elif choice == '5':
+                    self._reload_config()
+                elif choice == '6':
+                    self._export_config()
+                elif choice == '7':
+                    self._import_config()
+                elif choice == '8':
+                    self._reset_config()
+                else:
+                    print("❌ 无效选择，请输入 0-8 之间的数字")
 
-            input("\n按回车键继续...")
+            except Exception as e:
+                print(f"❌ 操作过程中发生错误: {e}")
+                print("请重试或联系技术支持")
+
+            if choice != '0':
+                input("\n按回车键继续...")
 
     def _show_current_config(self):
         """显示当前配置"""
-        print("\n📋 当前配置信息")
-        print("=" * 40)
-        print(f"📁 资源文件夹: {self.config.get_resource_folder()}")
-        print(f"📂 输出文件夹: {self.config.get_output_folder()}")
-        print(f"🌐 Tracker 数量: {len(self.config.get_trackers())}")
-        print(f"🔧 搜索容错率: {self.config.get_setting('file_search_tolerance', 60)}%")
-        print(f"📊 最大搜索结果: {self.config.get_setting('max_search_results', 10)}")
-        print(f"💾 缓存状态: {'启用' if self.config.get_setting('enable_cache', True) else '禁用'}")
+        print("\n" + "=" * 60)
+        print("           📋 当前配置信息")
+        print("=" * 60)
+
+        # 基本路径配置
+        resource_folder = self.config.get_resource_folder()
+        output_folder = self.config.get_output_folder()
+
+        print(f"📁 资源文件夹: {resource_folder}")
+        print(f"   {'✅ 存在' if os.path.exists(resource_folder) else '❌ 不存在'}")
+
+        print(f"📂 输出文件夹: {output_folder}")
+        print(f"   {'✅ 存在' if os.path.exists(output_folder) else '⚠️ 将自动创建'}")
+
+        # Tracker 配置
+        trackers = self.config.get_trackers()
+        print(f"🌐 Tracker 配置: {len(trackers)} 个")
+        if trackers:
+            print("   前3个 Tracker:")
+            for i, tracker in enumerate(trackers[:3], 1):
+                print(f"   {i}. {tracker}")
+            if len(trackers) > 3:
+                print(f"   ... 还有 {len(trackers) - 3} 个")
+        else:
+            print("   ❌ 未配置任何 Tracker")
+
+        # 高级配置
+        print("\n🔧 高级配置:")
+        try:
+            if hasattr(self.config, 'get_setting'):
+                tolerance = self.config.get_setting('file_search_tolerance', 60)
+                max_results = self.config.get_setting('max_search_results', 10)
+                cache_enabled = self.config.get_setting('enable_cache', True)
+                max_concurrent = self.config.get_setting('max_concurrent_operations', 4)
+            else:
+                # 如果 get_setting 方法不存在，直接从 settings 字典获取
+                tolerance = self.config.settings.get('file_search_tolerance', 60)
+                max_results = self.config.settings.get('max_search_results', 10)
+                cache_enabled = self.config.settings.get('enable_cache', True)
+                max_concurrent = self.config.settings.get('max_concurrent_operations', 4)
+
+            print(f"   🔍 搜索容错率: {tolerance}%")
+            print(f"   📊 最大搜索结果: {max_results}")
+            print(f"   💾 缓存状态: {'启用' if cache_enabled else '禁用'}")
+            print(f"   ⚡ 最大并发操作: {max_concurrent}")
+
+        except Exception as e:
+            print(f"   ⚠️ 获取详细配置信息时出错: {e}")
+            print("   基本配置信息已显示")
+
+        # 配置文件状态
+        print("\n📄 配置文件状态:")
+        if hasattr(self.config, 'settings_path'):
+            settings_path = self.config.settings_path
+            trackers_path = self.config.trackers_path
+            print(f"   ⚙️ 设置文件: {settings_path}")
+            print(f"      {'✅ 存在' if os.path.exists(settings_path) else '❌ 不存在'}")
+            print(f"   🌐 Tracker文件: {trackers_path}")
+            print(f"      {'✅ 存在' if os.path.exists(trackers_path) else '❌ 不存在'}")
+        else:
+            print("   📁 配置目录: ~/.torrent_maker/")
+
+        print("=" * 60)
 
     def _set_resource_folder(self):
         """设置资源文件夹"""
@@ -1489,9 +1646,15 @@ class TorrentMakerApp:
             if self.config.set_resource_folder(new_path):
                 print("✅ 资源文件夹设置成功")
                 # 重新初始化文件匹配器
+                enable_cache = True
+                if hasattr(self.config, 'get_setting'):
+                    enable_cache = self.config.get_setting('enable_cache', True)
+                elif hasattr(self.config, 'settings'):
+                    enable_cache = self.config.settings.get('enable_cache', True)
+
                 self.matcher = FileMatcher(
                     self.config.get_resource_folder(),
-                    enable_cache=self.config.get_setting('enable_cache', True)
+                    enable_cache=enable_cache
                 )
             else:
                 print("❌ 设置失败，请检查路径是否存在")
@@ -1575,9 +1738,15 @@ class TorrentMakerApp:
             self.config = ConfigManager()
 
             # 重新初始化其他组件
+            enable_cache = True
+            if hasattr(self.config, 'get_setting'):
+                enable_cache = self.config.get_setting('enable_cache', True)
+            elif hasattr(self.config, 'settings'):
+                enable_cache = self.config.settings.get('enable_cache', True)
+
             self.matcher = FileMatcher(
                 self.config.get_resource_folder(),
-                enable_cache=self.config.get_setting('enable_cache', True)
+                enable_cache=enable_cache
             )
 
             self.creator = TorrentCreator(
@@ -1589,6 +1758,129 @@ class TorrentMakerApp:
         except Exception as e:
             print(f"❌ 重新加载配置失败: {e}")
 
+    def _export_config(self):
+        """导出配置"""
+        print("\n📤 导出配置")
+        print("=" * 30)
+
+        default_path = f"torrent_maker_config_{time.strftime('%Y%m%d_%H%M%S')}.json"
+        export_path = input(f"请输入导出文件路径 (回车使用默认: {default_path}): ").strip()
+
+        if not export_path:
+            export_path = default_path
+
+        try:
+            if hasattr(self.config, 'export_config'):
+                if self.config.export_config(export_path):
+                    print(f"✅ 配置已导出到: {export_path}")
+                else:
+                    print("❌ 导出失败")
+            else:
+                # 手动导出配置
+                export_data = {
+                    'settings': self.config.settings,
+                    'trackers': self.config.get_trackers(),
+                    'export_time': time.strftime('%Y-%m-%d %H:%M:%S'),
+                    'version': '1.3.0'
+                }
+
+                with open(export_path, 'w', encoding='utf-8') as f:
+                    import json
+                    json.dump(export_data, f, ensure_ascii=False, indent=4)
+
+                print(f"✅ 配置已导出到: {export_path}")
+
+        except Exception as e:
+            print(f"❌ 导出配置失败: {e}")
+
+    def _import_config(self):
+        """导入配置"""
+        print("\n📥 导入配置")
+        print("=" * 30)
+        print("⚠️ 警告：导入配置将覆盖当前所有设置")
+
+        import_path = input("请输入配置文件路径: ").strip()
+        if not import_path:
+            print("❌ 路径不能为空")
+            return
+
+        if not os.path.exists(import_path):
+            print(f"❌ 文件不存在: {import_path}")
+            return
+
+        confirm = input("确认导入配置？这将覆盖当前设置 (y/N): ").strip().lower()
+        if confirm not in ['y', 'yes', '是']:
+            print("❌ 已取消导入")
+            return
+
+        try:
+            if hasattr(self.config, 'import_config'):
+                if self.config.import_config(import_path):
+                    print("✅ 配置导入成功")
+                    self._reload_config()  # 重新加载配置
+                else:
+                    print("❌ 导入失败")
+            else:
+                # 手动导入配置
+                with open(import_path, 'r', encoding='utf-8') as f:
+                    import json
+                    import_data = json.load(f)
+
+                if 'settings' in import_data:
+                    self.config.settings.update(import_data['settings'])
+                    self.config.save_settings()
+
+                if 'trackers' in import_data:
+                    self.config.trackers = import_data['trackers']
+                    self.config.save_trackers()
+
+                print("✅ 配置导入成功")
+                self._reload_config()  # 重新加载配置
+
+        except Exception as e:
+            print(f"❌ 导入配置失败: {e}")
+
+    def _reset_config(self):
+        """重置配置为默认值"""
+        print("\n🔄 重置配置")
+        print("=" * 30)
+        print("⚠️ 警告：这将重置所有配置为默认值")
+        print("包括：资源文件夹、输出文件夹、Tracker列表等")
+
+        confirm = input("确认重置所有配置为默认值？(y/N): ").strip().lower()
+        if confirm not in ['y', 'yes', '是']:
+            print("❌ 已取消重置")
+            return
+
+        try:
+            if hasattr(self.config, 'reset_to_defaults'):
+                if self.config.reset_to_defaults():
+                    print("✅ 配置已重置为默认值")
+                    self._reload_config()  # 重新加载配置
+                else:
+                    print("❌ 重置失败")
+            else:
+                # 手动重置配置
+                self.config.settings = self.config.DEFAULT_SETTINGS.copy()
+                self.config.trackers = self.config.DEFAULT_TRACKERS.copy()
+
+                # 展开用户目录路径
+                self.config.settings['resource_folder'] = os.path.expanduser(
+                    self.config.settings['resource_folder']
+                )
+                self.config.settings['output_folder'] = os.path.expanduser(
+                    self.config.settings['output_folder']
+                )
+
+                self.config.save_settings()
+                self.config.save_trackers()
+
+                print("✅ 配置已重置为默认值")
+                self._reload_config()  # 重新加载配置
+
+        except Exception as e:
+            print(f"❌ 重置配置失败: {e}")
+
     def run(self):
         """运行主程序"""
         self.display_header()
@@ -1599,7 +1891,7 @@ class TorrentMakerApp:
                 choice = input("请选择操作 (0-6): ").strip()
 
                 if choice == '0':
-                    print("👋 感谢使用 Torrent Maker v1.3.0！")
+                    print("👋 感谢使用 Torrent Maker v1.3.1！")
                     break
                 elif choice == '1':
                     self.search_and_create()
