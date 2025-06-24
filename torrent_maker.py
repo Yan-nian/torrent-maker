@@ -3597,15 +3597,27 @@ class TorrentMakerApp:
                 print("✅ 资源文件夹设置成功")
                 # 重新初始化文件匹配器
                 enable_cache = True
+                cache_duration = 3600
+                max_workers = 4
+
                 if hasattr(self.config, 'get_setting'):
                     enable_cache = self.config.get_setting('enable_cache', True)
+                    cache_duration = self.config.get_setting('cache_duration', 3600)
+                    max_workers = self.config.get_setting('max_concurrent_operations', 4)
                 elif hasattr(self.config, 'settings'):
                     enable_cache = self.config.settings.get('enable_cache', True)
+                    cache_duration = self.config.settings.get('cache_duration', 3600)
+                    max_workers = self.config.settings.get('max_concurrent_operations', 4)
 
+                # 使用新设置的路径直接创建 FileMatcher
+                new_resource_folder = self.config.settings['resource_folder']
                 self.matcher = FileMatcher(
-                    self.config.get_resource_folder(),
-                    enable_cache=enable_cache
+                    new_resource_folder,
+                    enable_cache=enable_cache,
+                    cache_duration=cache_duration,
+                    max_workers=max_workers
                 )
+                print(f"🔄 文件匹配器已重新初始化，使用路径: {new_resource_folder}")
             else:
                 print("❌ 设置失败，请检查路径是否存在")
 
