@@ -619,14 +619,19 @@ class TorrentCreator:
             raise TorrentCreationError(f"无法创建输出目录: {e}")
 
     def _calculate_piece_size(self, total_size: int) -> int:
+        """计算合适的piece大小，返回指数值（用于mktorrent -l参数）"""
         target_pieces = 1500
         optimal_piece_size = total_size // (target_pieces * 1024)
 
         for size in self.PIECE_SIZES:
             if size >= optimal_piece_size:
-                return size
+                # 返回指数值：log2(size * 1024)
+                import math
+                return int(math.log2(size * 1024))
 
-        return self.PIECE_SIZES[-1]
+        # 返回最大piece大小的指数值
+        import math
+        return int(math.log2(self.PIECE_SIZES[-1] * 1024))
 
     def _get_directory_size(self, path: Path) -> int:
         total_size = 0
@@ -658,6 +663,7 @@ class TorrentCreator:
         command.extend(['-c', comment])
 
         if piece_size:
+            # piece_size 已经是指数值（log2(实际字节数)）
             command.extend(['-l', str(piece_size)])
 
         if self.private:
@@ -696,9 +702,16 @@ class TorrentCreator:
                     total_size = source_path.stat().st_size
                 piece_size = self._calculate_piece_size(total_size)
             elif isinstance(self.piece_size, int):
-                piece_size = self.piece_size
+                # 如果用户设置的是KB值，需要转换为指数值
+                import math
+                piece_size = int(math.log2(self.piece_size * 1024))
 
             command = self._build_command(source_path, output_file, piece_size)
+
+            # 记录调试信息
+            if piece_size:
+                actual_piece_size = 2 ** piece_size
+                print(f"  🔧 Piece大小: 2^{piece_size} = {actual_piece_size} bytes ({actual_piece_size // 1024} KB)")
 
             if progress_callback:
                 progress_callback(f"正在创建种子文件: {torrent_name}")
