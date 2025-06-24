@@ -29,19 +29,19 @@ class TorrentMakerApp:
     def display_menu(self):
         """显示主菜单"""
         print("\n🔧 请选择操作:")
-        print("1. 🔍 搜索并制作种子          [s/search]")
+        print("1. 🔍 搜索并制作种子 (支持多选)  [s/search]")
         print("2. ⚙️  查看当前配置           [c/config]")
         print("3. 📁 设置资源文件夹          [r/resource]")
         print("4. 📂 设置输出文件夹          [o/output]")
         print("5. 🌐 管理 Tracker          [t/tracker]")
-        print("6. 🎯 快速制种 (直接输入路径)  [q/quick]")
+        print("6. 🎯 快速制种 (支持批量)      [q/quick]")
         print("7. 📋 查看最近制作的种子       [l/list]")
         print("8. ❓ 帮助                   [h/help]")
         print("0. 🚪 退出                   [exit/quit]")
         print("-" * 50)
 
     def search_and_create_torrent(self):
-        """搜索文件夹并创建种子"""
+        """搜索文件夹并创建种子 - 支持连续搜索和多选制种"""
         resource_folder = self.config_manager.get_resource_folder()
         
         if not os.path.exists(resource_folder):
@@ -49,11 +49,12 @@ class TorrentMakerApp:
             print("请先设置正确的资源文件夹路径（输入 r 或选项 3）")
             return
 
-        print(f"\n📁 当前搜索目录: {resource_folder}")
-        
-        # 获取用户输入
+        # 搜索循环 - 允许连续搜索
         while True:
-            series_name = input("\n🎭 请输入影视剧名称（支持模糊搜索，输入 'back' 返回）: ").strip()
+            print(f"\n📁 当前搜索目录: {resource_folder}")
+            
+            # 获取用户输入
+            series_name = input("\n🎭 请输入影视剧名称（支持模糊搜索，输入 'back' 返回主菜单）: ").strip()
             
             if series_name.lower() in ['back', 'b', '返回']:
                 return
@@ -61,104 +62,207 @@ class TorrentMakerApp:
             if not series_name:
                 print("❌ 请输入有效的影视剧名称")
                 continue
+
+            print(f"\n🔍 正在搜索包含 '{series_name}' 的文件夹...")
             
-            break
+            # 搜索匹配的文件夹
+            file_matcher = FileMatcher(resource_folder)
+            matched_folders = file_matcher.match_folders(series_name)
 
-        print(f"\n🔍 正在搜索包含 '{series_name}' 的文件夹...")
-        
-        # 搜索匹配的文件夹
-        file_matcher = FileMatcher(resource_folder)
-        matched_folders = file_matcher.match_folders(series_name)
-
-        if not matched_folders:
-            print("❌ 未找到匹配的文件夹")
-            print("💡 提示：")
-            print("   - 尝试使用更简单的关键词")
-            print("   - 检查资源文件夹路径是否正确")
-            print("   - 确认文件夹名称中包含您输入的关键词")
-            return
-
-        # 显示搜索结果
-        print(f"\n✅ 找到 {len(matched_folders)} 个匹配的文件夹:")
-        print("=" * 80)
-        
-        for i, folder_info in enumerate(matched_folders, 1):
-            print(f"{i:2d}. 📂 {folder_info['name']}")
-            print(f"     📍 路径: {folder_info['path']}")
-            print(f"     📊 匹配度: {folder_info['score']}%")
-            print(f"     📄 文件数: {folder_info['file_count']}")
-            print(f"     💾 大小: {folder_info['size']}")
-            # 显示剧集信息
-            if folder_info.get('episodes') and folder_info.get('video_count', 0) > 0:
-                print(f"     🎬 剧集: {folder_info['episodes']}")
-            print("-" * 80)
-
-        # 让用户选择文件夹
-        while True:
-            try:
-                choice_input = input(f"\n请选择要制作种子的文件夹 (1-{len(matched_folders)}) 或输入:\n"
-                                   f"  'a' 查看所有匹配项\n"
-                                   f"  'r' 重新搜索\n"
-                                   f"  'd数字' 查看详细剧集列表 (如 d1)\n"
-                                   f"  '0' 返回主菜单\n"
-                                   f"选择: ").strip().lower()
+            if not matched_folders:
+                print("❌ 未找到匹配的文件夹")
+                print("💡 提示：")
+                print("   - 尝试使用更简单的关键词")
+                print("   - 检查资源文件夹路径是否正确")
+                print("   - 确认文件夹名称中包含您输入的关键词")
                 
-                if choice_input == '0':
-                    return
-                elif choice_input == 'r':
-                    self.search_and_create_torrent()  # 递归调用重新搜索
-                    return
-                elif choice_input == 'a':
-                    # 显示所有匹配项的详细信息
-                    self.show_detailed_folder_info(matched_folders)
+                retry = input("\n是否重新搜索? (Y/n): ").strip().lower()
+                if retry in ['', 'y', 'yes', '是']:
                     continue
-                elif choice_input.startswith('d') and len(choice_input) > 1:
-                    # 显示详细剧集列表
-                    try:
-                        folder_index = int(choice_input[1:]) - 1
-                        if 0 <= folder_index < len(matched_folders):
-                            folder_info = matched_folders[folder_index]
-                            self.show_detailed_episodes(folder_info)
-                        else:
-                            print(f"❌ 请输入 d1-d{len(matched_folders)} 之间的选项")
-                    except ValueError:
-                        print("❌ 请输入有效的选项格式，如 d1, d2 等")
-                    continue
-                
-                choice_num = int(choice_input)
-                if 1 <= choice_num <= len(matched_folders):
-                    selected_folder = matched_folders[choice_num - 1]
-                    break
                 else:
-                    print(f"❌ 请输入 1-{len(matched_folders)} 之间的数字")
+                    return
+
+            # 显示搜索结果
+            print(f"\n✅ 找到 {len(matched_folders)} 个匹配的文件夹:")
+            print("=" * 80)
+            
+            for i, folder_info in enumerate(matched_folders, 1):
+                print(f"{i:2d}. 📂 {folder_info['name']}")
+                print(f"     📍 路径: {folder_info['path']}")
+                print(f"     📊 匹配度: {folder_info['score']}%")
+                print(f"     📄 文件数: {folder_info['file_count']}")
+                print(f"     💾 大小: {folder_info['size']}")
+                # 显示剧集信息
+                if folder_info.get('episodes') and folder_info.get('video_count', 0) > 0:
+                    print(f"     🎬 剧集: {folder_info['episodes']}")
+                print("-" * 80)
+
+            # 处理用户选择
+            selected_folders = self.handle_folder_selection(matched_folders)
+            
+            if selected_folders is None:  # 用户选择返回主菜单
+                return
+            elif selected_folders == 'continue_search':  # 用户选择继续搜索
+                continue
+            elif selected_folders:  # 用户选择了文件夹
+                # 处理制种
+                self.process_selected_folders(selected_folders)
+                
+                # 询问是否继续搜索
+                print("\n" + "=" * 60)
+                next_action = input("选择下一步操作:\n"
+                                  "  's' 或 'search' - 继续搜索其他内容\n"
+                                  "  'm' 或 'menu' - 返回主菜单\n"
+                                  "选择: ").strip().lower()
+                
+                if next_action in ['s', 'search', '搜索']:
+                    continue
+                else:
+                    return
+
+    def handle_folder_selection(self, matched_folders):
+        """处理文件夹选择 - 支持单选和多选"""
+        while True:
+            print(f"\n📋 选择操作:")
+            print(f"  数字 (1-{len(matched_folders)}) - 选择单个文件夹制种")
+            print(f"  多个数字用逗号分隔 (如: 1,3,5) - 批量制种")
+            print(f"  'a' - 查看所有匹配项详细信息")
+            print(f"  'd数字' - 查看详细剧集列表 (如: d1)")
+            print(f"  's' - 继续搜索其他内容")
+            print(f"  '0' - 返回主菜单")
+            
+            choice_input = input("选择: ").strip().lower()
+            
+            if choice_input == '0':
+                return None
+            elif choice_input == 's':
+                return 'continue_search'
+            elif choice_input == 'a':
+                self.show_detailed_folder_info(matched_folders)
+                continue
+            elif choice_input.startswith('d') and len(choice_input) > 1:
+                try:
+                    folder_index = int(choice_input[1:]) - 1
+                    if 0 <= folder_index < len(matched_folders):
+                        folder_info = matched_folders[folder_index]
+                        self.show_detailed_episodes(folder_info)
+                    else:
+                        print(f"❌ 请输入 d1-d{len(matched_folders)} 之间的选项")
+                except ValueError:
+                    print("❌ 请输入有效的选项格式，如 d1, d2 等")
+                continue
+            
+            # 处理数字选择（单选或多选）
+            try:
+                if ',' in choice_input:
+                    # 多选模式
+                    indices = [int(x.strip()) for x in choice_input.split(',')]
+                    selected_folders = []
+                    
+                    for idx in indices:
+                        if 1 <= idx <= len(matched_folders):
+                            selected_folders.append(matched_folders[idx - 1])
+                        else:
+                            print(f"❌ 索引 {idx} 超出范围 (1-{len(matched_folders)})")
+                            return self.handle_folder_selection(matched_folders)
+                    
+                    if selected_folders:
+                        print(f"\n✅ 已选择 {len(selected_folders)} 个文件夹进行批量制种:")
+                        for i, folder in enumerate(selected_folders, 1):
+                            print(f"  {i}. {folder['name']}")
+                        
+                        confirm = input(f"\n确认批量制作这 {len(selected_folders)} 个种子? (Y/n): ").strip().lower()
+                        if confirm in ['', 'y', 'yes', '是']:
+                            return selected_folders
+                        else:
+                            print("❌ 取消批量制种")
+                            continue
+                else:
+                    # 单选模式
+                    choice_num = int(choice_input)
+                    if 1 <= choice_num <= len(matched_folders):
+                        selected_folder = matched_folders[choice_num - 1]
+                        return self.handle_single_folder_actions(selected_folder)
+                    else:
+                        print(f"❌ 请输入 1-{len(matched_folders)} 之间的数字")
+                        
             except ValueError:
                 print("❌ 请输入有效的选项")
 
-        # 确认选择
+    def handle_single_folder_actions(self, selected_folder):
+        """处理单个文件夹的操作选择"""
         print(f"\n✅ 已选择: {selected_folder['name']}")
         print(f"📍 路径: {selected_folder['path']}")
         
-        # 显示更多选项
-        print("\n请选择操作:")
-        print("1. 🎬 立即制作种子")
-        print("2. 📁 查看文件夹详细内容")
-        print("3. 🔙 重新选择")
-        
-        action = input("选择 (1-3): ").strip()
-        
-        if action == '1':
-            confirm = input("确认制作种子? (Y/n): ").strip().lower()
-            if confirm in ['', 'y', 'yes', '是']:
-                self.create_torrent_file(selected_folder['path'], selected_folder['name'])
+        while True:
+            print("\n请选择操作:")
+            print("1. 🎬 立即制作种子")
+            print("2. 📁 查看文件夹详细内容")
+            print("3. 🔙 重新选择文件夹")
+            
+            action = input("选择 (1-3): ").strip()
+            
+            if action == '1':
+                confirm = input("确认制作种子? (Y/n): ").strip().lower()
+                if confirm in ['', 'y', 'yes', '是']:
+                    return [selected_folder]  # 返回列表格式以统一处理
+                else:
+                    print("❌ 取消制作种子")
+                    continue
+            elif action == '2':
+                self.show_folder_contents(selected_folder['path'])
+                if input("\n查看完毕，是否制作种子? (y/N): ").strip().lower() in ['y', 'yes', '是']:
+                    return [selected_folder]
+                else:
+                    continue
+            elif action == '3':
+                return 'reselect'
             else:
-                print("❌ 取消制作种子")
-        elif action == '2':
-            self.show_folder_contents(selected_folder['path'])
-            # 查看完内容后询问是否制作种子
-            if input("\n查看完毕，是否制作种子? (y/N): ").strip().lower() in ['y', 'yes', '是']:
-                self.create_torrent_file(selected_folder['path'], selected_folder['name'])
-        elif action == '3':
-            self.search_and_create_torrent()  # 重新搜索
+                print("❌ 请输入 1-3 之间的数字")
+
+    def process_selected_folders(self, selected_folders):
+        """处理选中的文件夹制种"""
+        if not selected_folders:
+            return
+            
+        trackers = self.config_manager.get_trackers()
+        if not trackers:
+            print("❌ 没有配置 Tracker，无法创建种子")
+            print("请先添加 Tracker（选项 5）")
+            return
+
+        output_dir = self.config_manager.get_output_folder()
+        torrent_creator = TorrentCreator(trackers, output_dir)
+        
+        print(f"\n🛠️  开始批量制作 {len(selected_folders)} 个种子...")
+        print(f"📂 输出目录: {output_dir}")
+        print(f"🌐 使用 {len(trackers)} 个 Tracker")
+        print("=" * 60)
+        
+        successful_count = 0
+        failed_count = 0
+        
+        for i, folder_info in enumerate(selected_folders, 1):
+            print(f"\n📦 正在处理 ({i}/{len(selected_folders)}): {folder_info['name']}")
+            print(f"📁 路径: {folder_info['path']}")
+            
+            torrent_file = torrent_creator.create_torrent(folder_info['path'], folder_info['name'])
+            
+            if torrent_file:
+                print(f"✅ 种子制作成功: {os.path.basename(torrent_file)}")
+                successful_count += 1
+            else:
+                print(f"❌ 种子制作失败: {folder_info['name']}")
+                failed_count += 1
+        
+        # 显示批量制种结果
+        print("\n" + "=" * 60)
+        print(f"🎉 批量制种完成!")
+        print(f"✅ 成功: {successful_count} 个")
+        if failed_count > 0:
+            print(f"❌ 失败: {failed_count} 个")
+        print(f"📂 种子保存位置: {output_dir}")
+        print("=" * 60)
 
     def create_torrent_file(self, folder_path: str, folder_name: str):
         """创建种子文件"""
@@ -344,10 +448,13 @@ class TorrentMakerApp:
         print("🔍 1. 搜索并制作种子 [s/search]:")
         print("   - 输入影视剧名称进行智能模糊搜索")
         print("   - 查看匹配文件夹的详细信息")
+        print("   - 🆕 支持多选制种：用逗号分隔选择多个文件夹 (如: 1,3,5)")
+        print("   - 🆕 支持连续搜索：制种完成后可继续搜索其他内容")
         print("   - 预览文件夹内容后再决定是否制种")
         print()
         print("🎯 6. 快速制种 [q/quick]:")
         print("   - 直接输入或拖拽文件夹路径")
+        print("   - 🆕 支持批量制种：用分号分隔多个路径 (如: path1;path2)")
         print("   - 跳过搜索步骤，快速制作种子")
         print()
         print("⚙️ 配置管理:")
@@ -363,7 +470,12 @@ class TorrentMakerApp:
         print("   t/tracker - 管理tracker h/help    - 显示帮助")
         print("   exit/quit - 退出程序")
         print()
-        print("📋 系统要求:")
+        print("🆕 新功能说明:")
+        print("   📦 批量制种: 可一次选择多个文件夹批量制作种子")
+        print("   🔄 连续搜索: 制种完成后无需返回主菜单即可继续搜索")
+        print("   � 进度显示: 批量制种时显示详细进度和结果统计")
+        print()
+        print("�📋 系统要求:")
         print("   - 需要安装 mktorrent 工具")
         print("   - macOS: brew install mktorrent")
         print("   - Ubuntu: sudo apt-get install mktorrent")
@@ -372,6 +484,7 @@ class TorrentMakerApp:
         print("   - 支持文件夹拖拽到终端")
         print("   - 支持路径自动补全 (Tab键)")
         print("   - 支持相对路径和 ~ 家目录符号")
+        print("   - 多选时可预览所有选中项再确认")
         print("=" * 60)
 
     def run(self):
@@ -428,48 +541,102 @@ class TorrentMakerApp:
                 print("程序将继续运行...")
 
     def quick_torrent_creation(self):
-        """快速制种 - 直接输入路径"""
+        """快速制种 - 直接输入路径，支持多个路径"""
         print("\n🎯 快速制种模式")
         print("直接输入文件夹路径来快速制作种子")
+        print("💡 支持多个路径，用英文分号(;)分隔")
         print("-" * 40)
         
-        folder_path = input("请输入文件夹完整路径 (或拖拽文件夹到此处): ").strip()
-        
-        # 处理拖拽文件夹的情况，移除引号
-        folder_path = folder_path.strip('"\'')
-        
-        if not folder_path:
-            print("❌ 请输入有效的文件夹路径")
-            return
-        
-        # 展开路径
-        folder_path = os.path.expanduser(folder_path)
-        
-        if not os.path.exists(folder_path):
-            print(f"❌ 文件夹不存在: {folder_path}")
-            return
-        
-        if not os.path.isdir(folder_path):
-            print(f"❌ 不是文件夹: {folder_path}")
-            return
-        
-        # 显示文件夹信息
-        folder_name = os.path.basename(folder_path)
-        from utils.helpers import get_directory_info
-        dir_info = get_directory_info(folder_path)
-        
-        print(f"\n📂 文件夹: {folder_name}")
-        print(f"📍 路径: {folder_path}")
-        print(f"📄 总文件数: {dir_info['total_files']}")
-        print(f"🎬 视频文件数: {dir_info['video_files']}")
-        print(f"💾 大小: {dir_info['total_size_formatted']}")
-        
-        # 询问是否制作种子
-        confirm = input("\n是否制作种子? (Y/n): ").strip().lower()
-        if confirm in ['', 'y', 'yes', '是', 'ok']:
-            self.create_torrent_file(folder_path, folder_name)
-        else:
-            print("❌ 取消制作种子")
+        while True:
+            folder_input = input("请输入文件夹完整路径 (多个路径用;分隔，输入'back'返回): ").strip()
+            
+            if folder_input.lower() in ['back', 'b', '返回']:
+                return
+            
+            if not folder_input:
+                print("❌ 请输入有效的文件夹路径")
+                continue
+                
+            # 处理多个路径的情况
+            folder_paths = [path.strip().strip('"\'') for path in folder_input.split(';')]
+            valid_folders = []
+            
+            print(f"\n🔍 检查 {len(folder_paths)} 个路径...")
+            
+            for i, folder_path in enumerate(folder_paths, 1):
+                # 展开路径
+                folder_path = os.path.expanduser(folder_path)
+                
+                print(f"\n{i}. 检查路径: {folder_path}")
+                
+                if not os.path.exists(folder_path):
+                    print(f"   ❌ 文件夹不存在")
+                    continue
+                
+                if not os.path.isdir(folder_path):
+                    print(f"   ❌ 不是文件夹")
+                    continue
+                
+                # 显示文件夹信息
+                folder_name = os.path.basename(folder_path)
+                try:
+                    from utils.helpers import get_directory_info
+                    dir_info = get_directory_info(folder_path)
+                    
+                    print(f"   ✅ 有效文件夹: {folder_name}")
+                    print(f"   📄 总文件数: {dir_info['total_files']}")
+                    print(f"   🎬 视频文件数: {dir_info['video_files']}")
+                    print(f"   💾 大小: {dir_info['total_size_formatted']}")
+                    
+                    valid_folders.append({
+                        'name': folder_name,
+                        'path': folder_path,
+                        'info': dir_info
+                    })
+                except Exception as e:
+                    print(f"   ⚠️  获取文件夹信息失败: {e}")
+                    valid_folders.append({
+                        'name': folder_name,
+                        'path': folder_path,
+                        'info': None
+                    })
+            
+            if not valid_folders:
+                print("\n❌ 没有找到有效的文件夹路径")
+                retry = input("是否重新输入? (Y/n): ").strip().lower()
+                if retry in ['', 'y', 'yes', '是']:
+                    continue
+                else:
+                    return
+            
+            # 显示汇总信息
+            print(f"\n📋 找到 {len(valid_folders)} 个有效文件夹:")
+            for i, folder in enumerate(valid_folders, 1):
+                print(f"  {i}. {folder['name']}")
+            
+            # 询问是否制作种子
+            if len(valid_folders) == 1:
+                confirm = input(f"\n是否为 '{valid_folders[0]['name']}' 制作种子? (Y/n): ").strip().lower()
+            else:
+                confirm = input(f"\n是否为这 {len(valid_folders)} 个文件夹批量制作种子? (Y/n): ").strip().lower()
+            
+            if confirm in ['', 'y', 'yes', '是', 'ok']:
+                # 使用统一的批量制种方法
+                self.process_selected_folders(valid_folders)
+                
+                # 询问是否继续
+                next_action = input("\n继续快速制种? (Y/n): ").strip().lower()
+                if next_action in ['', 'y', 'yes', '是']:
+                    continue
+                else:
+                    return
+            else:
+                print("❌ 取消制作种子")
+                retry = input("是否重新输入路径? (Y/n): ").strip().lower()
+                if retry in ['', 'y', 'yes', '是']:
+                    continue
+                else:
+                    return
 
     def list_recent_torrents(self):
         """查看最近制作的种子"""
