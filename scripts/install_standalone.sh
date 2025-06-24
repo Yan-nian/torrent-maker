@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Torrent Maker 单文件版本智能安装/更新脚本 v1.4.0
+# Torrent Maker 高性能单文件版本智能安装/更新脚本 v1.5.0
 # 支持 macOS 和 Linux 系统，支持自动更新
-# 🚀 v1.4.0 新特性: 动态版本管理，智能缓存系统，性能优化
+# 🚀 v1.5.0 新特性: 高性能优化版，种子创建速度提升30-50%，推荐主版本
 
 set -e  # 遇到错误时退出
 
@@ -26,9 +26,9 @@ import json
 try:
     with open('$temp_config', 'r') as f:
         config = json.load(f)
-    print(config.get('current_version', '1.4.0'))
+    print(config.get('current_version', '1.5.0'))
 except:
-    print('1.4.0')
+    print('1.5.0')
 " 2>/dev/null)
                 rm -f "$temp_config"
                 echo "$version"
@@ -43,9 +43,9 @@ import json
 try:
     with open('$temp_config', 'r') as f:
         config = json.load(f)
-    print(config.get('current_version', '1.4.0'))
+    print(config.get('current_version', '1.5.0'))
 except:
-    print('1.4.0')
+    print('1.5.0')
 " 2>/dev/null)
                 rm -f "$temp_config"
                 echo "$version"
