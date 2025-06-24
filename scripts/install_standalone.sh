@@ -3,8 +3,58 @@
 # Torrent Maker 高性能单文件版本智能安装/更新脚本 v1.5.0
 # 支持 macOS 和 Linux 系统，支持自动更新
 # 🚀 v1.5.0 新特性: 高性能优化版，种子创建速度提升30-50%，推荐主版本
+# 🔧 v1.5.0 优化更新: 改进版本获取逻辑，增强错误处理，添加调试模式
 
 set -e  # 遇到错误时退出
+
+# 解析命令行参数（提前解析以便设置调试模式）
+FORCE_INSTALL=false
+QUIET_MODE=false
+DEBUG_MODE=false
+
+for arg in "$@"; do
+    case $arg in
+        --debug)
+            DEBUG_MODE=true
+            ;;
+        --quiet)
+            QUIET_MODE=true
+            ;;
+        --force)
+            FORCE_INSTALL=true
+            ;;
+    esac
+done
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# 打印彩色消息函数
+print_info() {
+    if [ "$QUIET_MODE" = false ]; then
+        echo -e "${BLUE}ℹ️  $1${NC}"
+    fi
+}
+print_success() {
+    if [ "$QUIET_MODE" = false ]; then
+        echo -e "${GREEN}✅ $1${NC}"
+    fi
+}
+print_warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+print_error() {
+    echo -e "${RED}❌ $1${NC}"
+}
+print_debug() {
+    if [ "$DEBUG_MODE" = true ]; then
+        echo -e "${BLUE}🔍 [DEBUG] $1${NC}" >&2
+    fi
+}
 
 # 检查命令是否存在
 command_exists() {
@@ -15,10 +65,39 @@ command_exists() {
 get_current_version() {
     local version_config_url="https://raw.githubusercontent.com/$REPO/main/version_config.json"
     local temp_config="/tmp/version_config.json"
+    local local_config="./version_config.json"
+
+    print_debug "开始获取版本信息..."
+
+    # 优先检查本地版本配置文件（如果在项目目录中运行）
+    if [ -f "$local_config" ]; then
+        print_debug "发现本地版本配置文件: $local_config"
+        if command_exists python3; then
+            local version=$(python3 -c "
+import json
+try:
+    with open('$local_config', 'r') as f:
+        config = json.load(f)
+    version = config.get('current_version', '1.5.0')
+    print(version)
+except Exception as e:
+    print('1.5.0')
+" 2>/dev/null)
+            if [ -n "$version" ] && [ "$version" != "1.5.0" ] || [ "$version" = "1.5.0" ]; then
+                print_debug "从本地配置文件获取版本: $version"
+                echo "$version"
+                return 0
+            fi
+        fi
+    fi
+
+    print_debug "尝试从远程获取版本配置文件: $version_config_url"
 
     # 尝试下载版本配置文件
     if command_exists curl; then
+        print_debug "使用 curl 下载版本配置文件..."
         if curl -fsSL "$version_config_url" -o "$temp_config" 2>/dev/null; then
+            print_debug "版本配置文件下载成功"
             # 使用 Python 解析 JSON 获取版本号
             if command_exists python3; then
                 local version=$(python3 -c "
@@ -26,41 +105,60 @@ import json
 try:
     with open('$temp_config', 'r') as f:
         config = json.load(f)
-    print(config.get('current_version', '1.5.0'))
-except:
+    version = config.get('current_version', '1.5.0')
+    print(version)
+except Exception as e:
     print('1.5.0')
 " 2>/dev/null)
                 rm -f "$temp_config"
-                echo "$version"
-                return 0
+                if [ -n "$version" ]; then
+                    print_debug "从远程配置文件获取版本: $version"
+                    echo "$version"
+                    return 0
+                fi
             fi
+        else
+            print_debug "curl 下载失败"
         fi
     elif command_exists wget; then
+        print_debug "使用 wget 下载版本配置文件..."
         if wget -q "$version_config_url" -O "$temp_config" 2>/dev/null; then
+            print_debug "版本配置文件下载成功"
             if command_exists python3; then
                 local version=$(python3 -c "
 import json
 try:
     with open('$temp_config', 'r') as f:
         config = json.load(f)
-    print(config.get('current_version', '1.5.0'))
-except:
+    version = config.get('current_version', '1.5.0')
+    print(version)
+except Exception as e:
     print('1.5.0')
 " 2>/dev/null)
                 rm -f "$temp_config"
-                echo "$version"
-                return 0
+                if [ -n "$version" ]; then
+                    print_debug "从远程配置文件获取版本: $version"
+                    echo "$version"
+                    return 0
+                fi
             fi
+        else
+            print_debug "wget 下载失败"
         fi
+    else
+        print_debug "未找到 curl 或 wget 工具"
     fi
 
     # 如果无法获取，使用默认版本
-    echo "1.4.0"
+    print_debug "无法获取版本信息，使用默认版本: 1.5.0"
+    echo "1.5.0"
 }
 
 # 获取当前版本号
-VERSION="v$(get_current_version)"
 REPO="Yan-nian/torrent-maker"
+CURRENT_VERSION=$(get_current_version)
+VERSION="v$CURRENT_VERSION"
+print_debug "最终确定版本: $VERSION"
 INSTALL_DIR="$HOME/.local/bin"
 CONFIG_DIR="$HOME/.torrent_maker"
 SCRIPT_NAME="torrent_maker.py"
@@ -68,20 +166,9 @@ SCRIPT_NAME="torrent_maker.py"
 RAW_URL_MAIN="https://raw.githubusercontent.com/$REPO/main/torrent_maker.py"
 RAW_URL_VERSION="https://raw.githubusercontent.com/$REPO/$VERSION/torrent_maker.py"
 
-# 解析命令行参数
-FORCE_INSTALL=false
-QUIET_MODE=false
-
+# 处理帮助选项
 for arg in "$@"; do
     case $arg in
-        --force)
-            FORCE_INSTALL=true
-            shift
-            ;;
-        --quiet)
-            QUIET_MODE=true
-            shift
-            ;;
         --help)
             echo "Torrent Maker 安装脚本"
             echo ""
@@ -90,14 +177,14 @@ for arg in "$@"; do
             echo "选项:"
             echo "  --force   强制重新安装，即使已是最新版本"
             echo "  --quiet   静默模式，减少输出信息"
+            echo "  --debug   调试模式，显示详细的版本获取过程"
             echo "  --help    显示此帮助信息"
             echo ""
             echo "示例:"
             echo "  curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/install_standalone.sh | bash"
             echo "  curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/install_standalone.sh | bash -s -- --force"
+            echo "  curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/install_standalone.sh | bash -s -- --debug"
             exit 0
-            ;;
-        *)
             ;;
     esac
 done
@@ -107,6 +194,12 @@ if [ "$QUIET_MODE" = false ]; then
     echo "============================================"
     echo "版本: $VERSION"
     echo "仓库: https://github.com/$REPO"
+    if [ "$DEBUG_MODE" = true ]; then
+        echo "调试模式: 已启用"
+        echo "工作目录: $(pwd)"
+        echo "安装目录: $INSTALL_DIR"
+        echo "配置目录: $CONFIG_DIR"
+    fi
     echo ""
     echo "🚀 $VERSION 重大更新:"
     echo "  ⚡ 搜索速度提升60%，目录计算提升400%"
@@ -119,30 +212,7 @@ if [ "$QUIET_MODE" = false ]; then
     echo ""
 fi
 
-# 颜色定义
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
 
-# 打印彩色消息
-print_info() { 
-    if [ "$QUIET_MODE" = false ]; then
-        echo -e "${BLUE}ℹ️  $1${NC}"
-    fi
-}
-print_success() { 
-    if [ "$QUIET_MODE" = false ]; then
-        echo -e "${GREEN}✅ $1${NC}"
-    fi
-}
-print_warning() { 
-    echo -e "${YELLOW}⚠️  $1${NC}"
-}
-print_error() { 
-    echo -e "${RED}❌ $1${NC}"
-}
 
 # 版本比较函数 (语义化版本比较)
 version_compare() {
@@ -192,6 +262,8 @@ verify_downloaded_version() {
         return 1
     fi
 
+    print_debug "开始验证文件版本: $file_path"
+
     # 从文件中提取版本信息
     local file_version=""
     if command_exists python3; then
@@ -201,21 +273,32 @@ try:
     with open('$file_path', 'r', encoding='utf-8') as f:
         content = f.read()
 
-    # 尝试多种版本模式
+    # 尝试多种版本模式，按优先级排序
     patterns = [
         r'Torrent Maker - 单文件版本 v(\d+\.\d+\.\d+)',
         r'版本：(\d+\.\d+\.\d+)',
+        r'Torrent Maker v(\d+\.\d+\.\d+) - 高性能优化版',
         r'Torrent Maker v(\d+\.\d+\.\d+)',
+        r'Created by Torrent Maker v(\d+\.\d+\.\d+)',
+        r'🚀 v(\d+\.\d+\.\d+) 重大更新:',
+        r'🚀 v(\d+\.\d+\.\d+) 修复更新:',
+        r'🔧 v(\d+\.\d+\.\d+) 修复更新:',
+        r'感谢使用 Torrent Maker v(\d+\.\d+\.\d+)！',
+        r'种子创建器 - v(\d+\.\d+\.\d+)性能优化版本',
+        r'配置管理器 - v(\d+\.\d+\.\d+)修复优化版本',
+        r'文件匹配器 - v(\d+\.\d+\.\d+)修复优化版本',
+        r'Torrent Maker 主应用程序 - v(\d+\.\d+\.\d+)',
     ]
 
-    for pattern in patterns:
+    for i, pattern in enumerate(patterns):
         match = re.search(pattern, content)
         if match:
-            print(match.group(1))
+            version = match.group(1)
+            print(f'{version}')
             break
     else:
         print('')
-except:
+except Exception as e:
     print('')
 " 2>/dev/null)
     fi
@@ -224,6 +307,7 @@ except:
         local expected_version="${VERSION#v}"
         print_info "文件版本: v$file_version"
         print_info "期望版本: $VERSION"
+        print_debug "版本比较: 文件=$file_version, 期望=$expected_version"
 
         if [ "$file_version" = "$expected_version" ]; then
             print_success "版本验证通过"
@@ -234,6 +318,7 @@ except:
         fi
     else
         print_warning "无法验证文件版本，但继续安装"
+        print_debug "未能从文件中提取版本信息"
         return 0
     fi
 }
@@ -358,12 +443,14 @@ check_existing_installation() {
 
         # 检查版本
         if [ -f "$CONFIG_DIR/version" ]; then
-            installed_version=$(cat "$CONFIG_DIR/version")
+            installed_version=$(cat "$CONFIG_DIR/version" 2>/dev/null | head -n 1 | tr -d '\n\r')
             print_info "已安装版本: $installed_version"
 
             # 使用改进的版本比较
+            set +e  # 临时禁用错误退出
             version_compare "$installed_version" "$VERSION"
             local compare_result=$?
+            set -e  # 重新启用错误退出
 
             if [ $compare_result -eq 0 ]; then
                 # 版本相同
@@ -430,11 +517,30 @@ download_and_install() {
     # 检查是否在项目目录中运行，如果是则优先使用本地文件
     if [ -f "./torrent_maker.py" ] && [ -f "./version_config.json" ]; then
         print_info "检测到本地项目文件，使用本地版本"
-        if cp "./torrent_maker.py" "$target_file"; then
-            download_success=true
-            print_success "使用本地文件完成"
+        print_debug "本地文件路径: $(pwd)/torrent_maker.py"
+
+        # 验证本地文件是否为有效的Python脚本
+        if head -n 1 "./torrent_maker.py" | grep -q "#!/usr/bin/env python3"; then
+            print_debug "本地文件验证通过，开始复制"
+            if cp "./torrent_maker.py" "$target_file"; then
+                download_success=true
+                print_success "使用本地文件完成"
+                print_debug "本地文件复制成功: $target_file"
+            else
+                print_warning "复制本地文件失败，尝试在线下载"
+                print_debug "复制失败原因: 权限或磁盘空间问题"
+            fi
         else
-            print_warning "复制本地文件失败，尝试在线下载"
+            print_warning "本地文件不是有效的Python脚本，尝试在线下载"
+            print_debug "本地文件验证失败"
+        fi
+    else
+        print_debug "未检测到本地项目文件，将进行在线下载"
+        if [ ! -f "./torrent_maker.py" ]; then
+            print_debug "缺少文件: ./torrent_maker.py"
+        fi
+        if [ ! -f "./version_config.json" ]; then
+            print_debug "缺少文件: ./version_config.json"
         fi
     fi
 
@@ -445,17 +551,28 @@ download_and_install() {
 
         for url in "${download_urls[@]}"; do
             print_info "尝试下载地址: $url"
+            print_debug "下载目标文件: $target_file"
 
             if command_exists curl; then
-                if curl -fsSL "$url" -o "$target_file"; then
+                print_debug "使用 curl 下载..."
+                if curl -fsSL "$url" -o "$target_file" 2>/dev/null; then
                     download_success=true
+                    print_debug "curl 下载成功"
                     break
+                else
+                    print_debug "curl 下载失败"
                 fi
             elif command_exists wget; then
-                if wget -q "$url" -O "$target_file"; then
+                print_debug "使用 wget 下载..."
+                if wget -q "$url" -O "$target_file" 2>/dev/null; then
                     download_success=true
+                    print_debug "wget 下载成功"
                     break
+                else
+                    print_debug "wget 下载失败"
                 fi
+            else
+                print_debug "未找到下载工具"
             fi
 
             print_warning "下载失败，尝试下一个源..."
