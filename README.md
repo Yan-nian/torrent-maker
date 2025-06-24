@@ -212,10 +212,7 @@ torrent-maker/
 │   └── utils/           # 工具模块
 │       ├── __init__.py
 │       └── helpers.py
-└── tests/               # 测试文件（可选）
-    ├── test.py
-    ├── test_episodes.py
-    └── test_enhanced_search.py
+
 ```
 
 ### 单文件版本
@@ -225,23 +222,7 @@ standalone/
 └── README_STANDALONE.md  # 单文件版本说明
 ```
 
-## 🧪 测试
 
-项目包含多个测试脚本来验证各种功能：
-
-```bash
-# 测试基本功能
-python test.py
-
-# 测试剧集信息解析
-python test_episodes.py
-
-# 测试搜索算法
-python test_enhanced_search.py
-
-# 测试断集处理
-python test_episode_gaps.py
-```
 
 ## 📊 版本对比
 

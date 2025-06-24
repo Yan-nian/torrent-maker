@@ -33,7 +33,6 @@ cp requirements.txt "$FULL_DIR/"
 cp setup.py "$FULL_DIR/"
 cp run.py "$FULL_DIR/"
 cp install.sh "$FULL_DIR/"
-cp test.py "$FULL_DIR/"
 
 # 创建压缩包
 echo "🗜️  创建压缩包..."
