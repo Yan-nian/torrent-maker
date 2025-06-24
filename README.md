@@ -1,4 +1,4 @@
-# torrent-maker v1.3.1
+# torrent-maker v1.4.0
 
 一个基于 `mktorrent` 的半自动化种子制作工具，专为影视剧整季打包而设计。
 

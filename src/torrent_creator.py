@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Callable, Union
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from performance_monitor import PerformanceMonitor, DirectorySizeCache
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -70,6 +71,10 @@ class TorrentCreator:
         self.private = private
         self.comment = comment or self.DEFAULT_COMMENT
         self.max_workers = max_workers
+
+        # 初始化性能监控和缓存
+        self.performance_monitor = PerformanceMonitor()
+        self.size_cache = DirectorySizeCache()
 
         # 验证tracker列表
         if not self.tracker_links:

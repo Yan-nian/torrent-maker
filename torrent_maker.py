@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v1.3.1
+Torrent Maker - 单文件版本 v1.4.0
 基于 mktorrent 的高性能半自动化种子制作工具
 
 🚀 v1.3.1 修复更新:
@@ -18,7 +18,7 @@ Torrent Maker - 单文件版本 v1.3.1
 
 作者：Torrent Maker Team
 许可证：MIT
-版本：1.3.0
+版本：1.4.0
 """
 
 import os
@@ -840,7 +840,7 @@ class TorrentCreator:
     """种子创建器 - v1.3.1修复优化版本"""
 
     DEFAULT_PIECE_SIZE = "auto"
-    DEFAULT_COMMENT = "Created by Torrent Maker v1.3.1"
+    DEFAULT_COMMENT = "Created by Torrent Maker v1.4.0"
     PIECE_SIZES = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]
 
     def __init__(self, tracker_links: List[str], output_dir: str = "output",
@@ -1101,6 +1101,160 @@ class TorrentCreator:
             return False
 
 
+# ================== 搜索历史管理 ==================
+class SearchHistory:
+    """搜索历史管理器"""
+
+    def __init__(self, config_dir: str = None, max_history: int = 50):
+        """初始化搜索历史管理器"""
+        if config_dir is None:
+            config_dir = os.path.expanduser("~/.torrent_maker")
+
+        self.config_dir = Path(config_dir)
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+
+        self.history_file = self.config_dir / "search_history.json"
+        self.max_history = max_history
+        self.history: List[Dict[str, Any]] = []
+
+        self._load_history()
+
+    def _load_history(self):
+        """加载搜索历史"""
+        try:
+            if self.history_file.exists():
+                with open(self.history_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self.history = data.get('history', [])
+                    self._cleanup_old_history()
+            else:
+                self.history = []
+        except Exception as e:
+            print(f"⚠️ 加载搜索历史失败: {e}")
+            self.history = []
+
+    def _save_history(self):
+        """保存搜索历史"""
+        try:
+            data = {
+                'history': self.history,
+                'last_updated': datetime.now().isoformat()
+            }
+            with open(self.history_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"⚠️ 保存搜索历史失败: {e}")
+
+    def _cleanup_old_history(self):
+        """清理过期的历史记录"""
+        try:
+            from datetime import timedelta
+            cutoff_time = datetime.now() - timedelta(days=30)
+
+            self.history = [
+                item for item in self.history
+                if datetime.fromisoformat(item.get('timestamp', '1970-01-01'))
+                > cutoff_time
+            ]
+
+            if len(self.history) > self.max_history:
+                self.history = self.history[-self.max_history:]
+
+        except Exception as e:
+            print(f"⚠️ 清理历史记录失败: {e}")
+
+    def add_search(self, query: str, results_count: int = 0,
+                   resource_folder: str = None) -> None:
+        """添加搜索记录"""
+        if not query or not query.strip():
+            return
+
+        query = query.strip()
+
+        # 检查是否已存在相同的搜索
+        recent_queries = [item['query'] for item in self.history[-10:]]
+        if query in recent_queries:
+            for item in reversed(self.history):
+                if item['query'] == query:
+                    item['timestamp'] = datetime.now().isoformat()
+                    item['count'] = item.get('count', 0) + 1
+                    item['last_results_count'] = results_count
+                    if resource_folder:
+                        item['resource_folder'] = resource_folder
+                    break
+        else:
+            record = {
+                'query': query,
+                'timestamp': datetime.now().isoformat(),
+                'results_count': results_count,
+                'count': 1,
+                'last_results_count': results_count
+            }
+
+            if resource_folder:
+                record['resource_folder'] = resource_folder
+
+            self.history.append(record)
+
+        if len(self.history) > self.max_history:
+            self.history = self.history[-self.max_history:]
+
+        self._save_history()
+
+    def get_recent_searches(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """获取最近的搜索记录"""
+        sorted_history = sorted(
+            self.history,
+            key=lambda x: x.get('timestamp', ''),
+            reverse=True
+        )
+        return sorted_history[:limit]
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """获取搜索历史统计信息"""
+        if not self.history:
+            return {
+                'total_searches': 0,
+                'unique_queries': 0,
+                'average_results': 0,
+                'most_searched': None,
+                'recent_activity': 0
+            }
+
+        total_searches = sum(item.get('count', 1) for item in self.history)
+        unique_queries = len(self.history)
+
+        results_counts = [item.get('last_results_count', 0) for item in self.history]
+        average_results = sum(results_counts) / len(results_counts) if results_counts else 0
+
+        most_searched = max(self.history, key=lambda x: x.get('count', 0))
+
+        from datetime import timedelta
+        recent_cutoff = datetime.now() - timedelta(days=7)
+        recent_activity = sum(
+            1 for item in self.history
+            if datetime.fromisoformat(item.get('timestamp', '1970-01-01')) > recent_cutoff
+        )
+
+        return {
+            'total_searches': total_searches,
+            'unique_queries': unique_queries,
+            'average_results': round(average_results, 1),
+            'most_searched': most_searched,
+            'recent_activity': recent_activity
+        }
+
+    def clear_history(self) -> bool:
+        """清空搜索历史"""
+        try:
+            self.history = []
+            self._save_history()
+            return True
+        except Exception as e:
+            print(f"❌ 清空搜索历史失败: {e}")
+            return False
+
+
 # ================== 主程序 ==================
 class TorrentMakerApp:
     """Torrent Maker 主应用程序 - v1.3.1"""
@@ -1109,6 +1263,7 @@ class TorrentMakerApp:
         self.config = ConfigManager()
         self.matcher = None
         self.creator = None
+        self.search_history = SearchHistory()
         self._init_components()
 
     def _init_components(self):

@@ -199,21 +199,102 @@ def create_directory_if_not_exists(directory: str) -> bool:
 def truncate_path(path: str, max_length: int = 50) -> str:
     """
     截断过长的路径，在中间添加省略号
-    
+
     Args:
         path: 原始路径
         max_length: 最大长度
-    
+
     Returns:
         截断后的路径
     """
     if len(path) <= max_length:
         return path
-    
+
     # 计算两端保留的字符数
     side_length = (max_length - 3) // 2  # 减去省略号的长度
-    
+
     return f"{path[:side_length]}...{path[-side_length:]}"
+
+
+def format_path_display(path: str, base_path: str = None, max_length: int = 80) -> str:
+    """
+    格式化路径显示，支持相对路径和智能截断
+
+    Args:
+        path: 完整路径
+        base_path: 基础路径（用于显示相对路径）
+        max_length: 最大显示长度
+
+    Returns:
+        格式化后的路径字符串
+    """
+    try:
+        # 展开用户目录符号
+        expanded_path = os.path.expanduser(path)
+
+        # 如果提供了基础路径，尝试显示相对路径
+        if base_path:
+            try:
+                base_expanded = os.path.expanduser(base_path)
+                rel_path = os.path.relpath(expanded_path, base_expanded)
+                # 如果相对路径更短且不以..开头，使用相对路径
+                if len(rel_path) < len(expanded_path) and not rel_path.startswith('..'):
+                    path_to_display = f"./{rel_path}"
+                else:
+                    path_to_display = expanded_path
+            except ValueError:
+                # 不同驱动器等情况，使用绝对路径
+                path_to_display = expanded_path
+        else:
+            path_to_display = expanded_path
+
+        # 如果路径太长，进行智能截断
+        if len(path_to_display) > max_length:
+            return truncate_path(path_to_display, max_length)
+
+        return path_to_display
+
+    except Exception:
+        # 出错时返回原始路径
+        return truncate_path(path, max_length)
+
+
+def get_path_components(path: str) -> dict:
+    """
+    获取路径的各个组成部分
+
+    Args:
+        path: 文件路径
+
+    Returns:
+        包含路径组成部分的字典
+    """
+    try:
+        expanded_path = os.path.expanduser(path)
+        abs_path = os.path.abspath(expanded_path)
+
+        return {
+            'original': path,
+            'expanded': expanded_path,
+            'absolute': abs_path,
+            'dirname': os.path.dirname(abs_path),
+            'basename': os.path.basename(abs_path),
+            'parent': os.path.dirname(abs_path),
+            'exists': os.path.exists(abs_path),
+            'is_dir': os.path.isdir(abs_path) if os.path.exists(abs_path) else None
+        }
+    except Exception as e:
+        return {
+            'original': path,
+            'expanded': path,
+            'absolute': path,
+            'dirname': '',
+            'basename': path,
+            'parent': '',
+            'exists': False,
+            'is_dir': None,
+            'error': str(e)
+        }
 
 
 def get_relative_path(path: str, base_path: str) -> str:

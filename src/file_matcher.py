@@ -20,6 +20,7 @@ from pathlib import Path
 from difflib import SequenceMatcher
 from typing import List, Dict, Any, Tuple, Optional, Set
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from performance_monitor import PerformanceMonitor, SearchCache, DirectorySizeCache
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -137,8 +138,13 @@ class FileMatcher:
         self.min_score = min_score
         self.max_workers = max_workers
 
-        # 初始化缓存
+        # 初始化缓存系统
         self.cache = SearchCache(cache_duration) if enable_cache else None
+        self.folder_info_cache = SearchCache(cache_duration) if enable_cache else None
+
+        # 初始化性能监控
+        self.performance_monitor = PerformanceMonitor()
+        self.size_cache = DirectorySizeCache()
 
         # 验证基础目录
         if not self.base_directory.exists():
@@ -430,6 +436,9 @@ class FileMatcher:
         Returns:
             匹配的文件夹信息列表
         """
+        # 开始性能监控
+        self.performance_monitor.start_timer('match_folders')
+
         try:
             # 执行模糊搜索
             matches = self.fuzzy_search(search_name, max_results)
@@ -487,6 +496,11 @@ class FileMatcher:
         except Exception as e:
             logger.error(f"搜索文件夹时发生错误: {e}")
             return []
+        finally:
+            # 结束性能监控
+            duration = self.performance_monitor.end_timer('match_folders')
+            if duration > 3.0:  # 如果搜索时间超过3秒，记录警告
+                logger.warning(f"文件夹匹配耗时较长: {duration:.2f}s, 找到 {len(result) if 'result' in locals() else 0} 个匹配项")
 
     def _extract_episode_info_optimized(self, folder_path: str) -> Dict[str, Any]:
         """

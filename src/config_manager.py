@@ -14,6 +14,9 @@
 import json
 import os
 import logging
+import shutil
+import time
+import re
 from typing import Dict, List, Any, Optional, Union
 from pathlib import Path
 
@@ -232,6 +235,35 @@ class ConfigManager:
                     logger.warning(f"配置项 {key} 的值 {value} 无效，使用默认值")
                     self.settings[key] = self.DEFAULT_SETTINGS[key]
 
+        # 验证布尔类型的配置
+        boolean_configs = ['auto_create_output_dir', 'enable_cache', 'private_torrent']
+        for key in boolean_configs:
+            if key in self.settings and not isinstance(self.settings[key], bool):
+                logger.warning(f"配置项 {key} 的值 {self.settings[key]} 不是布尔类型，使用默认值")
+                self.settings[key] = self.DEFAULT_SETTINGS.get(key, False)
+
+        # 验证字符串类型的配置
+        string_configs = ['default_piece_size', 'log_level']
+        for key in string_configs:
+            if key in self.settings and not isinstance(self.settings[key], str):
+                logger.warning(f"配置项 {key} 的值 {self.settings[key]} 不是字符串类型，使用默认值")
+                self.settings[key] = self.DEFAULT_SETTINGS.get(key, "")
+
+        # 验证tracker URL的有效性
+        valid_trackers = []
+        for tracker in self.trackers:
+            if self._is_valid_tracker_url(tracker):
+                valid_trackers.append(tracker)
+            else:
+                logger.warning(f"无效的tracker URL: {tracker}")
+
+        if len(valid_trackers) != len(self.trackers):
+            self.trackers = valid_trackers
+            if not self.trackers:  # 如果没有有效的tracker，使用默认值
+                logger.warning("没有有效的tracker，使用默认tracker列表")
+                self.trackers = self.DEFAULT_TRACKERS.copy()
+                self.save_trackers()
+
     def _is_valid_tracker_url(self, url: str) -> bool:
         """
         验证tracker URL的有效性
@@ -240,12 +272,16 @@ class ConfigManager:
             url: tracker URL
 
         Returns:
-            如果URL有效返回True，否则返回False
+            URL是否有效
         """
-        import re
+        if not isinstance(url, str) or not url.strip():
+            return False
+
         # 简单的URL格式验证
         pattern = r'^(https?|udp)://[^\s/$.?#].[^\s]*$'
-        return bool(re.match(pattern, url, re.IGNORECASE))
+        return bool(re.match(pattern, url.strip(), re.IGNORECASE))
+
+
 
     def get_resource_folder(self) -> str:
         """
@@ -647,3 +683,176 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"读取导入文件失败: {e}")
             return False
+
+    def backup_config(self) -> bool:
+        """
+        备份当前配置
+
+        Returns:
+            备份成功返回True，否则返回False
+        """
+        try:
+            backup_dir = Path(self.settings_path).parent / "backups"
+            backup_dir.mkdir(exist_ok=True)
+
+            timestamp = time.strftime('%Y%m%d_%H%M%S')
+
+            # 备份设置文件
+            if self.settings_path.exists():
+                backup_settings = backup_dir / f"settings_{timestamp}.json"
+                shutil.copy2(self.settings_path, backup_settings)
+
+            # 备份tracker文件
+            if self.trackers_path.exists():
+                backup_trackers = backup_dir / f"trackers_{timestamp}.txt"
+                shutil.copy2(self.trackers_path, backup_trackers)
+
+            logger.info(f"配置已备份到: {backup_dir}")
+            return True
+
+        except Exception as e:
+            logger.error(f"备份配置失败: {e}")
+            return False
+
+    def restore_backup(self, backup_timestamp: str = None) -> bool:
+        """
+        恢复备份配置
+
+        Args:
+            backup_timestamp: 备份时间戳，None表示恢复最新备份
+
+        Returns:
+            恢复成功返回True，否则返回False
+        """
+        try:
+            backup_dir = Path(self.settings_path).parent / "backups"
+            if not backup_dir.exists():
+                logger.error("备份目录不存在")
+                return False
+
+            if backup_timestamp:
+                # 恢复指定时间戳的备份
+                settings_backup = backup_dir / f"settings_{backup_timestamp}.json"
+                trackers_backup = backup_dir / f"trackers_{backup_timestamp}.txt"
+            else:
+                # 查找最新的备份文件
+                settings_backups = list(backup_dir.glob("settings_*.json"))
+                trackers_backups = list(backup_dir.glob("trackers_*.txt"))
+
+                if not settings_backups:
+                    logger.error("没有找到设置文件备份")
+                    return False
+
+                settings_backup = max(settings_backups, key=lambda x: x.stat().st_mtime)
+                trackers_backup = max(trackers_backups, key=lambda x: x.stat().st_mtime) if trackers_backups else None
+
+            # 恢复设置文件
+            if settings_backup.exists():
+                shutil.copy2(settings_backup, self.settings_path)
+                logger.info(f"已恢复设置文件: {settings_backup}")
+
+            # 恢复tracker文件
+            if trackers_backup and trackers_backup.exists():
+                shutil.copy2(trackers_backup, self.trackers_path)
+                logger.info(f"已恢复tracker文件: {trackers_backup}")
+
+            # 重新加载配置
+            self.settings = self._load_settings()
+            self.trackers = self._load_trackers()
+
+            return True
+
+        except Exception as e:
+            logger.error(f"恢复备份配置失败: {e}")
+            return False
+
+    def get_config_status(self) -> Dict[str, Any]:
+        """
+        获取配置状态信息
+
+        Returns:
+            配置状态信息字典
+        """
+        try:
+            status = {
+                'settings_file': {
+                    'path': str(self.settings_path),
+                    'exists': self.settings_path.exists(),
+                    'size': self.settings_path.stat().st_size if self.settings_path.exists() else 0,
+                    'modified': time.ctime(self.settings_path.stat().st_mtime) if self.settings_path.exists() else None
+                },
+                'trackers_file': {
+                    'path': str(self.trackers_path),
+                    'exists': self.trackers_path.exists(),
+                    'size': self.trackers_path.stat().st_size if self.trackers_path.exists() else 0,
+                    'modified': time.ctime(self.trackers_path.stat().st_mtime) if self.trackers_path.exists() else None
+                },
+                'settings_count': len(self.settings),
+                'trackers_count': len(self.trackers),
+                'valid_trackers': len([t for t in self.trackers if self._is_valid_tracker_url(t)]),
+                'backup_dir': str(Path(self.settings_path).parent / "backups"),
+                'has_backups': (Path(self.settings_path).parent / "backups").exists()
+            }
+
+            return status
+
+        except Exception as e:
+            logger.error(f"获取配置状态失败: {e}")
+            return {}
+
+    def validate_and_repair(self) -> Dict[str, Any]:
+        """
+        验证并修复配置
+
+        Returns:
+            修复结果报告
+        """
+        repair_report = {
+            'issues_found': [],
+            'repairs_made': [],
+            'warnings': []
+        }
+
+        try:
+            # 检查配置文件完整性
+            if not self.settings_path.exists():
+                repair_report['issues_found'].append("设置文件不存在")
+                self._create_default_settings()
+                repair_report['repairs_made'].append("已创建默认设置文件")
+
+            if not self.trackers_path.exists():
+                repair_report['issues_found'].append("Tracker文件不存在")
+                self._create_default_trackers()
+                repair_report['repairs_made'].append("已创建默认Tracker文件")
+
+            # 检查必需的配置项
+            required_keys = ['resource_folder', 'output_folder']
+            for key in required_keys:
+                if key not in self.settings:
+                    repair_report['issues_found'].append(f"缺少必需配置项: {key}")
+                    self.settings[key] = self.DEFAULT_SETTINGS[key]
+                    repair_report['repairs_made'].append(f"已添加默认配置项: {key}")
+
+            # 检查tracker有效性
+            invalid_trackers = [t for t in self.trackers if not self._is_valid_tracker_url(t)]
+            if invalid_trackers:
+                repair_report['issues_found'].append(f"发现 {len(invalid_trackers)} 个无效tracker")
+                self.trackers = [t for t in self.trackers if self._is_valid_tracker_url(t)]
+                repair_report['repairs_made'].append(f"已移除 {len(invalid_trackers)} 个无效tracker")
+
+            # 检查目录是否存在
+            resource_folder = self.get_resource_folder()
+            if not os.path.exists(resource_folder):
+                repair_report['warnings'].append(f"资源文件夹不存在: {resource_folder}")
+
+            # 保存修复后的配置
+            if repair_report['repairs_made']:
+                self._save_settings()
+                self._save_trackers()
+
+            return repair_report
+
+        except Exception as e:
+            logger.error(f"配置验证和修复失败: {e}")
+            repair_report['issues_found'].append(f"验证过程出错: {e}")
+            return repair_report
