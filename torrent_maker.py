@@ -13,7 +13,7 @@ Torrent Maker - 单文件版本 v1.2.0
 - 📊 实时进度显示，批量操作优化
 
 使用方法：
-    python torrent_maker_v1.2.0.py
+    python torrent_maker.py
 
 作者：Torrent Maker Team
 许可证：MIT

@@ -35,7 +35,7 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
 fi
 
 # 获取当前版本号
-VERSION="v1.0.1"
+VERSION="v1.2.0"
 REPO="Yan-nian/torrent-maker"
 
 echo "📝 发布信息："
