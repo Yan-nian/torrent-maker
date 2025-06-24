@@ -876,6 +876,20 @@ class TorrentMakerApp:
                     print(f"      📊 匹配度: {result['score']}% | 📁 文件: {result['file_count']}个 | 💾 大小: {result['size']}")
                     if result['episodes']:
                         print(f"      🎬 剧集: {result['episodes']}")
+                    # 显示文件夹路径
+                    folder_path = result['path']
+                    # 如果路径太长，显示相对路径或缩短路径
+                    if len(folder_path) > 80:
+                        # 尝试显示相对于资源文件夹的路径
+                        resource_folder = self.config.get_resource_folder()
+                        if folder_path.startswith(resource_folder):
+                            relative_path = os.path.relpath(folder_path, resource_folder)
+                            print(f"      📂 路径: .../{relative_path}")
+                        else:
+                            # 如果路径太长，显示开头和结尾
+                            print(f"      📂 路径: {folder_path[:30]}...{folder_path[-30:]}")
+                    else:
+                        print(f"      📂 路径: {folder_path}")
                     print()
 
                 # 选择文件夹
