@@ -68,8 +68,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "1.8.1"
-VERSION_NAME = "搜索功能修复版"
+VERSION = "1.8.2"
+VERSION_NAME = "属性初始化修复版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
@@ -1802,6 +1802,9 @@ class FileMatcher:
         # 初始化智能索引
         self.smart_index = SmartIndexCache(cache_duration)
 
+        # 初始化异步处理器
+        self.async_processor = AsyncIOProcessor(max_workers)
+
         # 简化的相似度计算
         self.similarity_calc = FastSimilarityCalculator()
         self._compiled_patterns = self._compile_quality_patterns()
@@ -2515,6 +2518,13 @@ class TorrentCreator:
 
         # 目录大小缓存
         self.size_cache = DirectorySizeCache()
+
+        # 初始化 piece size 缓存
+        self._piece_size_cache = {}
+
+        # 初始化异步处理器
+        self.async_processor = AsyncIOProcessor(max_workers)
+        self.stream_processor = StreamFileProcessor(memory_manager=self.memory_manager)
 
         # 检测 mktorrent 可用性
         self.mktorrent_available = self._check_mktorrent()
@@ -3243,11 +3253,11 @@ class TorrentMakerApp:
         print("=" * 62)
         print()
         print(f"🎯 v{VERSION} {VERSION_NAME}更新:")
-        print("  🐍 集成纯Python种子创建引擎，避免subprocess开销")
-        print("  🧠 智能硬件检测和自适应优化")
-        print("  ⚡ 双引擎架构：Python引擎 + mktorrent引擎智能选择")
-        print("  🚀 23GB文件制种时间从202秒降至19秒，提升10.7倍速度")
-        print("  📈 小文件Python引擎比mktorrent快38%，大文件性能接近")
+        print("  🔧 修复TorrentCreator类属性初始化问题")
+        print("  ✅ 解决'_piece_size_cache'属性缺失错误")
+        print("  🚀 修复async_processor和stream_processor初始化")
+        print("  🐛 彻底解决制种过程中的属性错误")
+        print("  ⚡ 确保所有组件正确初始化和运行")
         print()
         print("🎯 v1.6.0 彻底重构更新:")
         print("  🗂️ 项目结构彻底简化，移除模块化组件")
