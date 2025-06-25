@@ -22,6 +22,12 @@
 - **修复版本显示不一致问题**：统一所有版本显示
 - **统一版本管理机制**：建立集中的版本常量管理
 - **优化用户界面显示**：确保版本信息准确显示
+- **全新安装脚本 v2.0**：企业级质量的现代化安装器
+  - 🎨 彩色输出和进度显示
+  - 🔧 智能依赖检查和自动安装
+  - 🛡️ 完善的错误处理和恢复机制
+  - 🌍 跨平台兼容性（macOS/Linux/Windows）
+  - 📋 多种安装模式（普通/静默/调试/强制）
 
 ## 🎯 v1.6.0 彻底重构版本
 
@@ -116,12 +122,34 @@ python3 torrent_maker.py
 
 ## 🚀 安装方式
 
-### 方式一：一键安装（推荐）
+### 方式一：智能安装脚本（推荐）
+
+全新的企业级安装脚本 v2.0，提供完整的安装体验：
 
 ```bash
-# 自动安装脚本（包含依赖检测）
+# 基础安装（自动检测依赖）
 curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash
+
+# 指定版本安装
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash -s -- --version 1.6.1
+
+# 静默安装（无输出）
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash -s -- --quiet
+
+# 强制重新安装
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash -s -- --force
+
+# 查看帮助信息
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash -s -- --help
 ```
+
+**安装脚本特性：**
+- 🎨 **彩色输出**：清晰的进度显示和状态反馈
+- 🔧 **智能依赖检查**：自动检测并安装 Python 3.7+ 和 mktorrent
+- 🛡️ **错误处理**：完善的错误恢复和故障排除
+- 🌍 **跨平台支持**：支持 macOS、Linux 各发行版
+- 📋 **多种模式**：普通、静默、调试、强制安装模式
+- ✅ **安装验证**：自动验证安装结果和文件完整性
 
 ### 方式二：直接下载运行
 
@@ -251,6 +279,70 @@ A: 检查资源文件夹路径是否正确，确保文件夹名称包含搜索�
 **Q: 程序运行缓慢？**
 A: 首次运行会建立缓存，后续会显著加速
 ---
+
+## 🔧 故障排除
+
+### 安装脚本问题
+
+**问题：安装脚本执行失败**
+```bash
+# 使用调试模式查看详细信息
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash -s -- --debug
+
+# 检查系统要求
+python3 --version  # 需要 Python 3.7+
+which mktorrent     # 检查 mktorrent 是否安装
+```
+
+**问题：权限不足**
+```bash
+# 确保有写入权限
+ls -la ~/.local/bin/
+mkdir -p ~/.local/bin
+
+# 或使用自定义安装目录
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash -s -- --dir ~/my-tools
+```
+
+**问题：网络连接失败**
+```bash
+# 检查网络连接
+curl -I https://api.github.com
+
+# 使用本地安装
+git clone https://github.com/Yan-nian/torrent-maker.git
+cd torrent-maker
+bash scripts/install.sh
+```
+
+### 运行时问题
+
+**问题：mktorrent 未找到**
+```bash
+# macOS
+brew install mktorrent
+
+# Ubuntu/Debian
+sudo apt update && sudo apt install mktorrent
+
+# CentOS/RHEL
+sudo yum install mktorrent
+
+# Fedora
+sudo dnf install mktorrent
+```
+
+**问题：Python 版本过低**
+```bash
+# 检查 Python 版本
+python3 --version
+
+# 升级 Python（macOS）
+brew install python3
+
+# 升级 Python（Ubuntu）
+sudo apt update && sudo apt install python3.9
+```
 
 ## 🤝 贡献与支持
 

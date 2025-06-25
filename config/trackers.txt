@@ -1,4 +1,3 @@
-udp://tracker.openbittorrent.com:80
-udp://tracker.opentrackr.org:1337/announce
-udp://exodus.desync.com:6969/announce
-udp://tracker.torrent.eu.org:451/announce
+https://tracker.qingwa.pro
+https://tracker.qingwapt.com
+https://tracker.qingwapt.org
