@@ -1,5 +1,30 @@
 # 更新日志 | Changelog
 
+## [v1.8.1] - 2025-06-25
+
+### 🐛 搜索功能修复版本
+
+#### 🔧 关键错误修复
+- **修复搜索功能 AttributeError**: 解决 `'FileMatcher' object has no attribute 'performance_monitor'` 错误
+- **添加缺失组件初始化**: 在 FileMatcher 和 TorrentCreator 类中添加性能监控和内存管理组件
+- **恢复搜索正常运行**: 搜索功能现在可以正常执行，不再崩溃
+
+#### 🚀 新增功能
+- **PerformanceMonitor 类**: 新增简单高效的性能监控系统
+  - 线程安全的计时功能
+  - 自动统计分析（平均值、最大值、最小值）
+  - 完整的性能数据收集
+
+#### 🎯 修复内容
+- **FileMatcher 初始化**: 添加 performance_monitor、memory_manager、smart_index 属性
+- **TorrentCreator 初始化**: 添加 performance_monitor、memory_manager 属性
+- **搜索稳定性**: 确保所有搜索相关功能正常工作
+
+#### ✅ 测试验证
+- 搜索功能完全恢复正常
+- 性能统计信息正确显示
+- 程序启动和运行稳定
+
 ## [v1.7.0] - 2025-06-25
 
 ### ⚡ 性能优先优化版本

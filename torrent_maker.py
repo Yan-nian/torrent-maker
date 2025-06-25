@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v1.6.1
+Torrent Maker - 单文件版本 v1.8.1
 基于 mktorrent 的高性能半自动化种子制作工具
 
-🎯 v1.6.1 版本同步修复版本:
-- 🔧 修复版本显示不一致问题
-- 📦 统一版本管理机制
-- 🎨 优化用户界面显示
+🎯 v1.8.1 搜索功能修复版本:
+- 🐛 修复搜索功能 AttributeError 错误
+- 🔧 添加缺失的性能监控组件初始化
+- ⚡ 恢复搜索功能正常运行
 
 🎯 v1.6.0 彻底重构版本:
 - 🗂️ 项目结构彻底简化，移除所有模块化组件
@@ -44,7 +44,7 @@ Torrent Maker - 单文件版本 v1.6.1
 
 作者：Torrent Maker Team
 许可证：MIT
-版本：1.7.0
+版本：1.8.1
 """
 
 import os
@@ -68,14 +68,67 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "1.8.0"
-VERSION_NAME = "mktorrent专用版"
+VERSION = "1.8.1"
+VERSION_NAME = "搜索功能修复版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
 
 
 
+
+
+# ================== 性能监控系统 ==================
+class PerformanceMonitor:
+    """简单的性能监控类"""
+
+    def __init__(self):
+        self._timers: Dict[str, float] = {}
+        self._stats: Dict[str, Dict[str, float]] = {}
+        self._lock = threading.Lock()
+
+    def start_timer(self, name: str) -> None:
+        """开始计时"""
+        with self._lock:
+            self._timers[name] = time.time()
+
+    def end_timer(self, name: str) -> float:
+        """结束计时并返回耗时"""
+        with self._lock:
+            if name not in self._timers:
+                return 0.0
+
+            duration = time.time() - self._timers[name]
+            del self._timers[name]
+
+            # 更新统计信息
+            if name not in self._stats:
+                self._stats[name] = {
+                    'count': 0,
+                    'total': 0.0,
+                    'average': 0.0,
+                    'max': 0.0,
+                    'min': float('inf')
+                }
+
+            stats = self._stats[name]
+            stats['count'] += 1
+            stats['total'] += duration
+            stats['average'] = stats['total'] / stats['count']
+            stats['max'] = max(stats['max'], duration)
+            stats['min'] = min(stats['min'], duration)
+
+            return duration
+
+    def get_stats(self, name: str) -> Dict[str, float]:
+        """获取指定计时器的统计信息"""
+        with self._lock:
+            return self._stats.get(name, {})
+
+    def get_all_stats(self) -> Dict[str, Dict[str, float]]:
+        """获取所有统计信息"""
+        with self._lock:
+            return self._stats.copy()
 
 
 # ================== 缓存系统 ==================
@@ -1742,6 +1795,12 @@ class FileMatcher:
         self.cache = SearchCache(cache_duration) if enable_cache else None
         self.folder_info_cache = SearchCache(cache_duration) if enable_cache else None
 
+        # 初始化性能监控和内存管理
+        self.performance_monitor = PerformanceMonitor()
+        self.memory_manager = MemoryManager()
+
+        # 初始化智能索引
+        self.smart_index = SmartIndexCache(cache_duration)
 
         # 简化的相似度计算
         self.similarity_calc = FastSimilarityCalculator()
@@ -2449,6 +2508,10 @@ class TorrentCreator:
         self.private = private
         self.comment = comment or self.DEFAULT_COMMENT
         self.max_workers = max_workers
+
+        # 初始化性能监控和内存管理
+        self.performance_monitor = PerformanceMonitor()
+        self.memory_manager = MemoryManager()
 
         # 目录大小缓存
         self.size_cache = DirectorySizeCache()
