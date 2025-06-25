@@ -2,8 +2,13 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v1.6.0
+Torrent Maker - 单文件版本 v1.6.1
 基于 mktorrent 的高性能半自动化种子制作工具
+
+🎯 v1.6.1 版本同步修复版本:
+- 🔧 修复版本显示不一致问题
+- 📦 统一版本管理机制
+- 🎨 优化用户界面显示
 
 🎯 v1.6.0 彻底重构版本:
 - 🗂️ 项目结构彻底简化，移除所有模块化组件
@@ -63,6 +68,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExec
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
+# ================== 版本信息 ==================
+VERSION = "1.6.1"
+VERSION_NAME = "版本同步修复版"
+FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 # ================== 性能监控 ==================
 class PerformanceMonitor:
@@ -2416,7 +2425,7 @@ class TorrentCreator:
     """种子创建器 - v1.5.1高性能优化版本"""
 
     DEFAULT_PIECE_SIZE = "auto"
-    DEFAULT_COMMENT = "Created by Torrent Maker v1.6.0"
+    DEFAULT_COMMENT = f"Created by Torrent Maker v{VERSION}"
     PIECE_SIZES = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]
 
     # Piece Size 查找表 - 预计算常用大小范围
@@ -2541,7 +2550,7 @@ class TorrentCreator:
         command.extend(['-o', str(output_file)])
 
         # 设置注释（简化以减少开销）
-        comment = f"{self.comment} v1.6.0"
+        comment = f"{self.comment}"
         command.extend(['-c', comment])
 
         # 设置 piece 大小
@@ -2934,8 +2943,8 @@ class TorrentCreator:
         memory_info = self.memory_manager.get_memory_usage()
 
         return {
-            'version': '1.6.0',
-            'optimization_level': 'Restructured - Single File',
+            'version': VERSION,
+            'optimization_level': f'{VERSION_NAME} - Single File',
             'features': [
                 'Smart Piece Size Calculation',
                 'LRU Directory Cache',
@@ -3180,9 +3189,14 @@ class TorrentMakerApp:
     def display_header(self):
         """显示程序头部信息"""
         print("🎬" + "=" * 60)
-        print("           Torrent Maker v1.6.0 - 彻底重构版")
+        print(f"           {FULL_VERSION_INFO}")
         print("           基于 mktorrent 的半自动化种子制作工具")
         print("=" * 62)
+        print()
+        print(f"🎯 v{VERSION} {VERSION_NAME}更新:")
+        print("  🔧 修复版本显示不一致问题")
+        print("  📦 统一版本管理机制")
+        print("  🎨 优化用户界面显示")
         print()
         print("🎯 v1.6.0 彻底重构更新:")
         print("  🗂️ 项目结构彻底简化，移除模块化组件")
@@ -3830,7 +3844,7 @@ class TorrentMakerApp:
                     'settings': self.config.settings,
                     'trackers': self.config.get_trackers(),
                     'export_time': time.strftime('%Y-%m-%d %H:%M:%S'),
-                    'version': '1.3.0'
+                    'version': VERSION
                 }
 
                 with open(export_path, 'w', encoding='utf-8') as f:
@@ -3940,7 +3954,7 @@ class TorrentMakerApp:
                 choice = input("请选择操作 (0-6): ").strip()
 
                 if choice == '0':
-                    print("👋 感谢使用 Torrent Maker v1.6.0！")
+                    print(f"👋 感谢使用 {FULL_VERSION_INFO}！")
                     break
                 elif choice == '1':
                     self.search_and_create()

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Torrent Maker v1.6.0 单文件版本安装脚本
+# Torrent Maker v1.6.1 单文件版本安装脚本
 # 极简安装，一键完成所有配置
 
 set -e  # 遇到错误时退出
@@ -40,14 +40,14 @@ import sys, json
 try:
     data = json.load(sys.stdin)
     tag = data.get('tag_name', '')
-    version = tag.lstrip('v') if tag else '1.6.0'
+    version = tag.lstrip('v') if tag else '1.6.1'
     print(version)
 except:
-    print('1.6.0')
+    print('1.6.1')
 " 2>/dev/null)
-        echo "${latest_version:-1.6.0}"
+        echo "${latest_version:-1.6.1}"
     else
-        echo "1.6.0"
+        echo "1.6.1"
     fi
 }
 

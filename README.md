@@ -1,8 +1,8 @@
-# 🎬 Torrent Maker v1.6.0 - 极简单文件版
+# 🎬 Torrent Maker v1.6.1 - 版本同步修复版
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.6.1-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.7+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)
@@ -15,6 +15,13 @@
 </div>
 
 ---
+
+## 🎯 v1.6.1 版本同步修复版本
+
+### 🔧 v1.6.1 更新内容
+- **修复版本显示不一致问题**：统一所有版本显示
+- **统一版本管理机制**：建立集中的版本常量管理
+- **优化用户界面显示**：确保版本信息准确显示
 
 ## 🎯 v1.6.0 彻底重构版本
 
@@ -209,7 +216,7 @@ sudo pacman -S mktorrent
 
 ### 🔥 vs 传统工具
 
-| 对比项目 | 传统工具 | Torrent Maker v1.6.0 | 优势 |
+| 对比项目 | 传统工具 | Torrent Maker v1.6.1 | 优势 |
 |---------|---------|---------------------|------|
 | **安装复杂度** | 复杂配置 | 单文件下载即用 | **极简** |
 | **搜索速度** | 手动浏览 | 毫秒级智能搜索 | **100x** 更快 |
