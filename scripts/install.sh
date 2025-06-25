@@ -18,7 +18,7 @@ readonly REPO_NAME="torrent-maker"
 readonly GITHUB_REPO="${REPO_OWNER}/${REPO_NAME}"
 
 # 默认配置
-readonly DEFAULT_VERSION="1.7.0"
+readonly DEFAULT_VERSION="1.7.1"
 readonly DEFAULT_INSTALL_DIR="$HOME/.local/bin"
 readonly DEFAULT_CONFIG_DIR="$HOME/.torrent_maker"
 
@@ -173,14 +173,112 @@ smart_download() {
     fi
 }
 
-# 获取目标版本
+# 从文件中提取版本号
+extract_version_from_file() {
+    local file_path="$1"
+    local version=""
+
+    if [[ ! -f "$file_path" ]]; then
+        log_debug "文件不存在: $file_path"
+        return 1
+    fi
+
+    # 使用正则表达式提取 VERSION = "x.y.z" 格式的版本号
+    version=$(grep -E '^[[:space:]]*VERSION[[:space:]]*=[[:space:]]*["\'"'"']([^"'"'"']+)["\'"'"']' "$file_path" 2>/dev/null | \
+              sed -E 's/^[[:space:]]*VERSION[[:space:]]*=[[:space:]]*["\'"'"']([^"'"'"']+)["\'"'"'].*/\1/' | \
+              head -1)
+
+    if [[ -n "$version" ]]; then
+        log_debug "从文件 $file_path 提取到版本: $version"
+        echo "$version"
+        return 0
+    else
+        log_debug "无法从文件 $file_path 提取版本号"
+        return 1
+    fi
+}
+
+# 从远程文件获取版本号
+get_remote_version() {
+    local remote_url="$GITHUB_RAW_BASE/$GITHUB_REPO/main/$SCRIPT_NAME"
+    local temp_file
+    temp_file=$(mktemp)
+
+    log_debug "从远程获取版本: $remote_url"
+
+    # 下载远程文件到临时位置
+    if smart_download "$remote_url" "$temp_file" "远程版本检测"; then
+        local version
+        if version=$(extract_version_from_file "$temp_file"); then
+            rm -f "$temp_file"
+            echo "$version"
+            return 0
+        fi
+    fi
+
+    rm -f "$temp_file"
+    log_debug "无法从远程获取版本号"
+    return 1
+}
+
+# 版本比较函数 (语义化版本比较)
+compare_versions() {
+    local version1="$1"
+    local version2="$2"
+
+    # 移除可能的 'v' 前缀
+    version1="${version1#v}"
+    version2="${version2#v}"
+
+    # 分割版本号
+    IFS='.' read -ra v1_parts <<< "$version1"
+    IFS='.' read -ra v2_parts <<< "$version2"
+
+    # 补齐版本号位数
+    while [[ ${#v1_parts[@]} -lt 3 ]]; do v1_parts+=(0); done
+    while [[ ${#v2_parts[@]} -lt 3 ]]; do v2_parts+=(0); done
+
+    # 逐位比较
+    for i in {0..2}; do
+        if [[ ${v1_parts[i]} -gt ${v2_parts[i]} ]]; then
+            return 1  # version1 > version2
+        elif [[ ${v1_parts[i]} -lt ${v2_parts[i]} ]]; then
+            return 2  # version1 < version2
+        fi
+    done
+
+    return 0  # version1 == version2
+}
+
+# 获取目标版本 (改进版)
 get_target_version() {
+    local version=""
+
+    # 优先级1: 用户指定版本
     if [[ -n "$TARGET_VERSION" ]]; then
+        log_debug "使用用户指定版本: $TARGET_VERSION"
         echo "$TARGET_VERSION"
         return 0
     fi
-    
+
+    # 优先级2: 本地文件版本
+    if [[ -f "./$SCRIPT_NAME" ]] && version=$(extract_version_from_file "./$SCRIPT_NAME"); then
+        log_debug "使用本地文件版本: $version"
+        echo "$version"
+        return 0
+    fi
+
+    # 优先级3: 远程文件版本
+    if version=$(get_remote_version); then
+        log_debug "使用远程文件版本: $version"
+        echo "$version"
+        return 0
+    fi
+
+    # 优先级4: 默认版本
+    log_debug "使用默认版本: $DEFAULT_VERSION"
     echo "$DEFAULT_VERSION"
+    return 0
 }
 
 # 获取下载 URL
@@ -262,69 +360,169 @@ check_mktorrent() {
     print_success "mktorrent 安装成功"
 }
 
-# 下载和安装主程序
+# 检查已安装版本
+get_installed_version() {
+    local version_file="$CONFIG_DIR/version"
+
+    if [[ -f "$version_file" ]]; then
+        local installed_version
+        installed_version=$(cat "$version_file" 2>/dev/null | sed 's/^v//')
+        if [[ -n "$installed_version" ]]; then
+            echo "$installed_version"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+# 检查是否需要更新
+check_for_updates() {
+    local current_version="$1"
+    local latest_version="$2"
+
+    if [[ -z "$current_version" ]] || [[ -z "$latest_version" ]]; then
+        return 1
+    fi
+
+    compare_versions "$current_version" "$latest_version"
+    local result=$?
+
+    if [[ $result -eq 2 ]]; then
+        # current < latest，需要更新
+        return 0
+    else
+        # current >= latest，不需要更新
+        return 1
+    fi
+}
+
+# 下载和安装主程序 (改进版)
 download_and_install() {
     local version
     version=$(get_target_version)
-    
-    print_step "下载 $APP_DISPLAY_NAME v$version"
-    
+    local actual_version=""
+
+    print_step "准备安装 $APP_DISPLAY_NAME v$version"
+
+    # 检查是否已安装以及是否需要更新
+    local installed_version
+    if installed_version=$(get_installed_version) && [[ "$FORCE_INSTALL" == false ]]; then
+        print_info "检测到已安装版本: v$installed_version"
+
+        if check_for_updates "$installed_version" "$version"; then
+            print_info "发现新版本 v$version，准备更新..."
+        else
+            print_success "已安装最新版本 v$installed_version"
+            if [[ $QUIET_MODE == false ]]; then
+                echo
+                echo "如需强制重新安装，请使用 --force 参数"
+            fi
+            return 0
+        fi
+    fi
+
     # 创建必要的目录
     safe_mkdir "$INSTALL_DIR"
     safe_mkdir "$CONFIG_DIR"
-    
+
     local target_file="$INSTALL_DIR/$SCRIPT_NAME"
-    
+
     # 优先使用本地文件
     if [[ -f "./$SCRIPT_NAME" ]] && [[ "$FORCE_INSTALL" == false ]]; then
         print_info "检测到本地文件，使用本地版本"
         cp "./$SCRIPT_NAME" "$target_file"
+
+        # 从复制的文件中提取实际版本号
+        if actual_version=$(extract_version_from_file "$target_file"); then
+            version="$actual_version"
+            print_info "本地文件版本: v$version"
+        fi
     else
         # 从 GitHub 下载
         local download_url
         download_url=$(get_download_url "$version")
-        
+
         print_info "从 GitHub 下载: $download_url"
-        
+
         if ! smart_download "$download_url" "$target_file" "$APP_DISPLAY_NAME v$version"; then
             exit 1
         fi
+
+        # 从下载的文件中提取实际版本号
+        if actual_version=$(extract_version_from_file "$target_file"); then
+            version="$actual_version"
+            print_info "下载文件版本: v$version"
+        fi
     fi
-    
+
     # 设置执行权限
     chmod +x "$target_file"
-    
-    # 保存版本信息
+
+    # 保存实际版本信息
     echo "v$version" > "$CONFIG_DIR/version"
-    
+
+    # 记录安装历史
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local install_method="本地文件"
+    if [[ ! -f "./$SCRIPT_NAME" ]] || [[ "$FORCE_INSTALL" == true ]]; then
+        install_method="GitHub下载"
+    fi
+    echo "[$timestamp] 安装 Torrent Maker v$version ($install_method)" >> "$CONFIG_DIR/install_history.log"
+
     print_success "安装完成: $APP_DISPLAY_NAME v$version"
     return 0
 }
 
-# 验证安装结果
+# 验证安装结果 (改进版)
 verify_installation() {
     print_step "验证安装"
-    
+
     local target_file="$INSTALL_DIR/$SCRIPT_NAME"
-    
+
+    # 检查文件存在性和可执行性
     if [[ ! -f "$target_file" ]] || [[ ! -x "$target_file" ]]; then
-        print_error "安装验证失败"
+        print_error "安装验证失败: 文件不存在或无执行权限"
         return 1
     fi
-    
+
+    # 验证文件内容（检查是否为有效的Python文件）
+    if ! head -1 "$target_file" | grep -q "python"; then
+        print_warning "警告: 文件可能不是有效的Python脚本"
+    fi
+
+    # 验证版本信息
+    local file_version
+    if file_version=$(extract_version_from_file "$target_file"); then
+        print_info "验证版本: v$file_version"
+    else
+        print_warning "警告: 无法从安装文件中提取版本信息"
+    fi
+
     print_success "安装验证通过"
     return 0
 }
 
-# 显示使用说明
+# 显示使用说明 (改进版)
 show_usage_info() {
     local target_file="$1"
-    local version
-    version=$(get_target_version)
-    
+    local installed_version
+
+    # 获取实际安装的版本
+    if installed_version=$(get_installed_version); then
+        # 从安装文件中再次确认版本
+        local file_version
+        if file_version=$(extract_version_from_file "$target_file"); then
+            installed_version="$file_version"
+        fi
+    else
+        installed_version=$(get_target_version)
+    fi
+
     if [[ $QUIET_MODE == false ]]; then
         echo
-        print_success "🎉 $APP_DISPLAY_NAME v$version 安装成功！"
+        print_success "🎉 $APP_DISPLAY_NAME v$installed_version 安装成功！"
         echo "=============================================="
         echo
         echo "📋 使用方法："
@@ -332,23 +530,72 @@ show_usage_info() {
         echo
         echo "📁 配置目录: $CONFIG_DIR"
         echo "📄 程序位置: $target_file"
+        echo "📊 安装版本: v$installed_version"
         echo
         echo "🚀 现在可以开始使用了！"
         echo
+
+        # 显示版本历史（如果存在）
+        local history_file="$CONFIG_DIR/install_history.log"
+        if [[ -f "$history_file" ]]; then
+            local history_count
+            history_count=$(wc -l < "$history_file" 2>/dev/null || echo "0")
+            if [[ $history_count -gt 1 ]]; then
+                echo "📜 安装历史: 共 $history_count 次安装"
+                echo "   最近安装: $(tail -1 "$history_file" 2>/dev/null | cut -d']' -f1 | tr -d '[')"
+            fi
+        fi
+
+        # 显示系统信息
+        echo
+        echo "🖥️  系统信息:"
+        echo "   操作系统: $(uname -s) $(uname -r)"
+        echo "   Python版本: $(python3 --version 2>/dev/null | cut -d' ' -f2)"
+        if has_command mktorrent; then
+            local mktorrent_version
+            mktorrent_version=$(mktorrent --help 2>&1 | head -1 | grep -o 'mktorrent [0-9.]*' || echo "mktorrent (版本未知)")
+            echo "   mktorrent: $mktorrent_version"
+        fi
+    fi
+}
+
+# 显示更新提示
+show_update_hint() {
+    if [[ $QUIET_MODE == true ]]; then
+        return 0
+    fi
+
+    local current_version
+    if current_version=$(get_installed_version); then
+        local latest_version
+        if latest_version=$(get_remote_version); then
+            if check_for_updates "$current_version" "$latest_version"; then
+                echo
+                print_info "💡 发现新版本 v$latest_version 可用！"
+                echo "   运行以下命令更新："
+                echo "   curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash"
+                echo
+            fi
+        fi
     fi
 }
 
 # 主函数
 main() {
     print_header
-    
+
     # 检查依赖
     check_python
     check_mktorrent
-    
+
     # 下载和安装
     if download_and_install && verify_installation; then
         show_usage_info "$INSTALL_DIR/$SCRIPT_NAME"
+
+        # 如果不是强制安装，显示更新提示
+        if [[ "$FORCE_INSTALL" == false ]]; then
+            show_update_hint
+        fi
     else
         print_error "安装失败"
         exit 1

@@ -1,8 +1,8 @@
-# 🎬 Torrent Maker v1.7.0 - 性能优先优化版
+# 🎬 Torrent Maker v1.7.1 - 高性能Python引擎版
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.7.1-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.7+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)
@@ -16,9 +16,9 @@
 
 ---
 
-## 🎯 v1.7.0 性能优先优化版本
+## 🎯 v1.7.1 高性能Python引擎版本
 
-### ⚡ v1.7.0 重大性能优化
+### ⚡ v1.7.1 重大性能优化
 - **制种速度大幅提升**：Piece Size 策略全面优化，提升4倍
   - 小文件：16KB → 64KB
   - 大文件：4MB → 16MB
@@ -132,7 +132,7 @@ python3 torrent_maker.py
 curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash
 
 # 指定版本安装
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash -s -- --version 1.6.1
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash -s -- --version 1.7.1
 
 # 静默安装（无输出）
 curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash -s -- --quiet
@@ -245,7 +245,7 @@ sudo pacman -S mktorrent
 
 ### 🔥 vs 传统工具
 
-| 对比项目 | 传统工具 | Torrent Maker v1.7.0 | 优势 |
+| 对比项目 | 传统工具 | Torrent Maker v1.7.1 | 优势 |
 |---------|---------|---------------------|------|
 | **安装复杂度** | 复杂配置 | 单文件下载即用 | **极简** |
 | **搜索速度** | 手动浏览 | 毫秒级智能搜索 | **100x** 更快 |
