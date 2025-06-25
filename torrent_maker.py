@@ -55,15 +55,10 @@ import shutil
 import time
 import logging
 import hashlib
-import tempfile
 import threading
 import re
-import platform
-import multiprocessing
-import struct
-import base64
 from datetime import datetime
-from difflib import SequenceMatcher
+
 from typing import List, Dict, Any, Tuple, Optional, Union, Set
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
@@ -73,445 +68,14 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "1.7.3"
-VERSION_NAME = "远程服务器优化版"
+VERSION = "1.8.0"
+VERSION_NAME = "mktorrent专用版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
-# ================== 硬件检测和自适应优化 ==================
-class HardwareDetector:
-    """硬件检测和性能优化类"""
 
-    def __init__(self):
-        self._cpu_info = None
-        self._memory_info = None
-        self._disk_info = None
-        self._performance_cache = {}
 
-    def get_cpu_info(self) -> Dict[str, Any]:
-        """获取CPU信息"""
-        if self._cpu_info is None:
-            try:
-                cpu_count = os.cpu_count() or 4
-                # 尝试获取更详细的CPU信息
-                cpu_info = {
-                    'logical_cores': cpu_count,
-                    'physical_cores': cpu_count,  # 默认值
-                    'architecture': platform.machine(),
-                    'system': platform.system()
-                }
 
-                # 在macOS上尝试获取物理核心数
-                if platform.system() == 'Darwin':
-                    try:
-                        result = subprocess.run(['sysctl', '-n', 'hw.physicalcpu'],
-                                              capture_output=True, text=True, timeout=2)
-                        if result.returncode == 0:
-                            cpu_info['physical_cores'] = int(result.stdout.strip())
-                    except:
-                        pass
 
-                # 在Linux上尝试获取物理核心数
-                elif platform.system() == 'Linux':
-                    try:
-                        with open('/proc/cpuinfo', 'r') as f:
-                            content = f.read()
-                            physical_cores = len(set(re.findall(r'physical id\s*:\s*(\d+)', content)))
-                            if physical_cores > 0:
-                                cpu_info['physical_cores'] = physical_cores
-                    except:
-                        pass
-
-                self._cpu_info = cpu_info
-            except Exception:
-                self._cpu_info = {
-                    'logical_cores': 4,
-                    'physical_cores': 4,
-                    'architecture': 'unknown',
-                    'system': 'unknown'
-                }
-
-        return self._cpu_info
-
-    def get_memory_info(self) -> Dict[str, Any]:
-        """获取内存信息"""
-        if self._memory_info is None:
-            try:
-                # 尝试使用psutil
-                try:
-                    import psutil
-                    memory = psutil.virtual_memory()
-                    self._memory_info = {
-                        'total_gb': memory.total / (1024**3),
-                        'available_gb': memory.available / (1024**3),
-                        'percent_used': memory.percent
-                    }
-                except ImportError:
-                    # 回退到系统命令
-                    if platform.system() == 'Darwin':
-                        result = subprocess.run(['sysctl', '-n', 'hw.memsize'],
-                                              capture_output=True, text=True, timeout=2)
-                        if result.returncode == 0:
-                            total_bytes = int(result.stdout.strip())
-                            self._memory_info = {
-                                'total_gb': total_bytes / (1024**3),
-                                'available_gb': total_bytes / (1024**3) * 0.7,  # 估算
-                                'percent_used': 30.0
-                            }
-                    else:
-                        # 默认值
-                        self._memory_info = {
-                            'total_gb': 8.0,
-                            'available_gb': 6.0,
-                            'percent_used': 25.0
-                        }
-            except Exception:
-                self._memory_info = {
-                    'total_gb': 8.0,
-                    'available_gb': 6.0,
-                    'percent_used': 25.0
-                }
-
-        return self._memory_info
-
-    def calculate_optimal_workers(self, task_type: str = 'io') -> int:
-        """计算最优工作进程/线程数"""
-        cpu_info = self.get_cpu_info()
-        memory_info = self.get_memory_info()
-
-        logical_cores = cpu_info['logical_cores']
-        physical_cores = cpu_info['physical_cores']
-        available_memory = memory_info['available_gb']
-
-        if task_type == 'cpu':
-            # CPU密集型任务：使用物理核心数
-            return min(physical_cores, 8)
-        elif task_type == 'io':
-            # I/O密集型任务：可以超过核心数
-            base_workers = logical_cores * 2
-            # 根据内存限制调整
-            if available_memory < 4:
-                base_workers = min(base_workers, 4)
-            elif available_memory > 16:
-                base_workers = min(base_workers * 2, 32)
-            return base_workers
-        elif task_type == 'hash':
-            # 哈希计算：平衡CPU和内存，针对远程服务器优化
-            if logical_cores >= 16:
-                # 高性能服务器（如您的20线程Xeon）充分利用所有核心
-                return min(logical_cores, 24)  # 最多24线程，为系统保留一些资源
-            else:
-                return min(logical_cores, 16)
-        else:
-            return logical_cores
-
-    def benchmark_io_performance(self, test_size_mb: int = 50) -> Dict[str, float]:
-        """快速I/O性能基准测试"""
-        cache_key = f"io_benchmark_{test_size_mb}"
-        if cache_key in self._performance_cache:
-            return self._performance_cache[cache_key]
-
-        try:
-            test_file = Path(tempfile.gettempdir()) / f"torrent_maker_io_test_{os.getpid()}.tmp"
-            test_size = test_size_mb * 1024 * 1024
-
-            # 写入测试
-            start_time = time.time()
-            with open(test_file, 'wb') as f:
-                f.write(os.urandom(test_size))
-            write_time = time.time() - start_time
-            write_speed = test_size_mb / write_time if write_time > 0 else 1000
-
-            # 读取测试
-            start_time = time.time()
-            with open(test_file, 'rb') as f:
-                data = f.read()
-            read_time = time.time() - start_time
-            read_speed = test_size_mb / read_time if read_time > 0 else 1000
-
-            # 哈希测试
-            start_time = time.time()
-            hash_obj = hashlib.sha1()
-            chunk_size = 64 * 1024
-            with open(test_file, 'rb') as f:
-                while chunk := f.read(chunk_size):
-                    hash_obj.update(chunk)
-            hash_result = hash_obj.hexdigest()
-            hash_time = time.time() - start_time
-            hash_speed = test_size_mb / hash_time if hash_time > 0 else 100
-
-            # 清理
-            test_file.unlink(missing_ok=True)
-
-            result = {
-                'write_speed_mb_s': write_speed,
-                'read_speed_mb_s': read_speed,
-                'hash_speed_mb_s': hash_speed
-            }
-
-            self._performance_cache[cache_key] = result
-            return result
-
-        except Exception as e:
-            logger.warning(f"I/O基准测试失败: {e}")
-            return {
-                'write_speed_mb_s': 100.0,
-                'read_speed_mb_s': 500.0,
-                'hash_speed_mb_s': 200.0
-            }
-
-# ================== 纯Python种子创建引擎 ==================
-class PythonTorrentEngine:
-    """纯Python种子创建引擎 - 高性能实现"""
-
-    def __init__(self, hardware_detector: HardwareDetector):
-        self.hardware = hardware_detector
-        self.chunk_size = 64 * 1024  # 64KB chunks for hashing
-
-    def create_torrent_data(self, source_path: Path, piece_length: int,
-                           trackers: List[str], comment: str = "",
-                           private: bool = False) -> bytes:
-        """创建种子文件数据"""
-
-        # 收集文件信息
-        if source_path.is_file():
-            files_info = [{'path': [source_path.name], 'length': source_path.stat().st_size}]
-            total_size = source_path.stat().st_size
-            name = source_path.name
-        else:
-            files_info, total_size = self._scan_directory(source_path)
-            name = source_path.name
-
-        # 计算pieces
-        pieces = self._calculate_pieces_parallel(source_path, piece_length, total_size)
-
-        # 构建torrent字典
-        torrent_dict = {
-            'announce': trackers[0] if trackers else '',
-            'announce-list': [[tracker] for tracker in trackers] if len(trackers) > 1 else None,
-            'comment': comment,
-            'created by': f'Torrent Maker v{VERSION}',
-            'creation date': int(time.time()),
-            'info': {
-                'name': name,
-                'piece length': piece_length,
-                'pieces': pieces,
-            }
-        }
-
-        # 添加文件信息
-        if len(files_info) == 1 and source_path.is_file():
-            torrent_dict['info']['length'] = files_info[0]['length']
-        else:
-            torrent_dict['info']['files'] = files_info
-
-        # 私有种子标记
-        if private:
-            torrent_dict['info']['private'] = 1
-
-        # 清理None值
-        torrent_dict = {k: v for k, v in torrent_dict.items() if v is not None}
-        if torrent_dict['info'].get('announce-list') is None:
-            torrent_dict.pop('announce-list', None)
-
-        # 编码为bencode
-        return self._bencode(torrent_dict)
-
-    def _scan_directory(self, directory: Path) -> Tuple[List[Dict], int]:
-        """扫描目录获取文件信息"""
-        files_info = []
-        total_size = 0
-
-        for file_path in sorted(directory.rglob('*')):
-            if file_path.is_file():
-                relative_path = file_path.relative_to(directory)
-                file_size = file_path.stat().st_size
-                files_info.append({
-                    'path': list(relative_path.parts),
-                    'length': file_size
-                })
-                total_size += file_size
-
-        return files_info, total_size
-
-    def _calculate_pieces_parallel(self, source_path: Path, piece_length: int, total_size: int) -> bytes:
-        """并行计算pieces哈希"""
-        pieces = b''
-
-        # 计算最优工作进程数
-        num_workers = self.hardware.calculate_optimal_workers('hash')
-
-        if source_path.is_file():
-            pieces = self._hash_file_parallel(source_path, piece_length, num_workers)
-        else:
-            pieces = self._hash_directory_parallel(source_path, piece_length, num_workers)
-
-        return pieces
-
-    def _hash_file_parallel(self, file_path: Path, piece_length: int, num_workers: int) -> bytes:
-        """并行哈希单个文件"""
-        file_size = file_path.stat().st_size
-        num_pieces = (file_size + piece_length - 1) // piece_length
-
-        if num_pieces <= num_workers or num_pieces <= 4:
-            # 小文件直接串行处理
-            return self._hash_file_sequential(file_path, piece_length)
-
-        # 大文件并行处理 - 使用线程池而不是进程池避免序列化问题
-        pieces = [b''] * num_pieces
-
-        def hash_piece(piece_index):
-            start_offset = piece_index * piece_length
-            end_offset = min(start_offset + piece_length, file_size)
-
-            hasher = hashlib.sha1()
-            with open(file_path, 'rb') as f:
-                f.seek(start_offset)
-                remaining = end_offset - start_offset
-
-                while remaining > 0:
-                    chunk_size = min(self.chunk_size, remaining)
-                    chunk = f.read(chunk_size)
-                    if not chunk:
-                        break
-                    hasher.update(chunk)
-                    remaining -= len(chunk)
-
-            return piece_index, hasher.digest()
-
-        # 使用线程池并行处理（避免进程池的序列化问题）
-        with ThreadPoolExecutor(max_workers=num_workers) as executor:
-            futures = [executor.submit(hash_piece, i) for i in range(num_pieces)]
-
-            for future in as_completed(futures):
-                piece_index, piece_hash = future.result()
-                pieces[piece_index] = piece_hash
-
-        return b''.join(pieces)
-
-    def _hash_file_sequential(self, file_path: Path, piece_length: int) -> bytes:
-        """串行哈希文件（用于小文件）"""
-        pieces = b''
-
-        with open(file_path, 'rb') as f:
-            while True:
-                hasher = hashlib.sha1()
-                piece_data = f.read(piece_length)
-                if not piece_data:
-                    break
-                hasher.update(piece_data)
-                pieces += hasher.digest()
-
-        return pieces
-
-    def _hash_directory_parallel(self, directory: Path, piece_length: int, num_workers: int) -> bytes:
-        """并行哈希目录"""
-        # 收集所有文件
-        all_files = []
-        for file_path in sorted(directory.rglob('*')):
-            if file_path.is_file():
-                all_files.append(file_path)
-
-        if not all_files:
-            return b''
-
-        # 计算总大小
-        total_size = sum(f.stat().st_size for f in all_files)
-        num_pieces = (total_size + piece_length - 1) // piece_length
-
-        pieces = [b''] * num_pieces
-        current_piece = 0
-        current_piece_data = b''
-
-        # 串行读取文件，但并行计算哈希
-        for file_path in all_files:
-            with open(file_path, 'rb') as f:
-                while True:
-                    remaining_in_piece = piece_length - len(current_piece_data)
-                    if remaining_in_piece <= 0:
-                        # 当前piece已满，计算哈希
-                        pieces[current_piece] = hashlib.sha1(current_piece_data).digest()
-                        current_piece += 1
-                        current_piece_data = b''
-                        remaining_in_piece = piece_length
-
-                    chunk = f.read(min(self.chunk_size, remaining_in_piece))
-                    if not chunk:
-                        break
-
-                    current_piece_data += chunk
-
-        # 处理最后一个piece
-        if current_piece_data:
-            pieces[current_piece] = hashlib.sha1(current_piece_data).digest()
-
-        return b''.join(pieces[:current_piece + 1])
-
-    def _bencode(self, data) -> bytes:
-        """Bencode编码实现"""
-        if isinstance(data, int):
-            return f'i{data}e'.encode('utf-8')
-        elif isinstance(data, bytes):
-            return f'{len(data)}:'.encode('utf-8') + data
-        elif isinstance(data, str):
-            data_bytes = data.encode('utf-8')
-            return f'{len(data_bytes)}:'.encode('utf-8') + data_bytes
-        elif isinstance(data, list):
-            result = b'l'
-            for item in data:
-                result += self._bencode(item)
-            result += b'e'
-            return result
-        elif isinstance(data, dict):
-            result = b'd'
-            for key in sorted(data.keys()):
-                result += self._bencode(key)
-                result += self._bencode(data[key])
-            result += b'e'
-            return result
-        else:
-            raise ValueError(f"无法编码类型: {type(data)}")
-
-# ================== 性能监控 ==================
-class PerformanceMonitor:
-    """性能监控类"""
-
-    def __init__(self):
-        self._timers: Dict[str, float] = {}
-        self._stats: Dict[str, List[float]] = {}
-        self._lock = threading.Lock()
-
-    def start_timer(self, name: str) -> None:
-        with self._lock:
-            self._timers[name] = time.time()
-
-    def end_timer(self, name: str) -> float:
-        with self._lock:
-            if name in self._timers:
-                duration = time.time() - self._timers[name]
-                if name not in self._stats:
-                    self._stats[name] = []
-                self._stats[name].append(duration)
-                del self._timers[name]
-                return duration
-            return 0.0
-
-    def get_stats(self, name: str) -> Dict[str, float]:
-        with self._lock:
-            if name not in self._stats or not self._stats[name]:
-                return {}
-
-            times = self._stats[name]
-            return {
-                'count': len(times),
-                'total': sum(times),
-                'average': sum(times) / len(times),
-                'min': min(times),
-                'max': max(times)
-            }
-
-    def get_all_stats(self) -> Dict[str, Dict[str, float]]:
-        with self._lock:
-            return {name: self.get_stats(name) for name in self._stats.keys()}
 
 
 # ================== 缓存系统 ==================
@@ -2177,15 +1741,10 @@ class FileMatcher:
         self.max_workers = max_workers
         self.cache = SearchCache(cache_duration) if enable_cache else None
         self.folder_info_cache = SearchCache(cache_duration) if enable_cache else None
-        self.performance_monitor = PerformanceMonitor()
 
-        # v1.5.1 新增：智能索引缓存、内存管理和异步 I/O
-        self.smart_index = SmartIndexCache(cache_duration)
+
+        # 简化的相似度计算
         self.similarity_calc = FastSimilarityCalculator()
-        self.memory_manager = MemoryManager(max_memory_mb=256)  # 限制 256MB
-        self.stream_processor = StreamFileProcessor(memory_manager=self.memory_manager)
-        self.async_processor = AsyncIOProcessor(max_concurrent=6)
-        self.async_file_processor = AsyncFileProcessor(max_concurrent=4)
         self._compiled_patterns = self._compile_quality_patterns()
 
         if not self.base_directory.exists():
@@ -2883,130 +2442,30 @@ class TorrentCreator:
 
     def __init__(self, tracker_links: List[str], output_dir: str = "output",
                  piece_size: Union[str, int] = "auto", private: bool = False,
-                 comment: str = None, max_workers: int = 4, engine: str = "auto"):
+                 comment: str = None, max_workers: int = 4):
         self.tracker_links = list(tracker_links) if tracker_links else []
         self.output_dir = Path(output_dir)
         self.piece_size = piece_size
         self.private = private
         self.comment = comment or self.DEFAULT_COMMENT
         self.max_workers = max_workers
-        self.engine = engine  # "auto", "python", "mktorrent"
 
-        # 硬件检测和优化
-        self.hardware = HardwareDetector()
-
-        # 性能监控和缓存
-        self.performance_monitor = PerformanceMonitor()
+        # 目录大小缓存
         self.size_cache = DirectorySizeCache()
-        self._piece_size_cache = {}  # 缓存计算结果
 
-        # v1.7.0 高性能引擎
-        self.python_engine = PythonTorrentEngine(self.hardware)
-
-        # v1.5.1 第二阶段优化：内存管理和异步 I/O
-        self.memory_manager = MemoryManager(max_memory_mb=512)
-        self.stream_processor = StreamFileProcessor(memory_manager=self.memory_manager)
-        self.async_processor = AsyncIOProcessor(max_concurrent=4)
-        self.async_file_processor = AsyncFileProcessor(max_concurrent=6)
-
-        # 检测可用引擎
+        # 检测 mktorrent 可用性
         self.mktorrent_available = self._check_mktorrent()
-        self.python_available = True  # Python引擎总是可用
-
-        # 选择最优引擎
-        self.selected_engine = self._select_optimal_engine()
+        if not self.mktorrent_available:
+            raise TorrentCreationError("mktorrent 不可用，请安装 mktorrent: apt-get install mktorrent 或 brew install mktorrent")
 
     def _check_mktorrent(self) -> bool:
         return shutil.which('mktorrent') is not None
 
-    def _select_optimal_engine(self) -> str:
-        """选择最优的种子创建引擎"""
-        if self.engine == "python":
-            return "python"
-        elif self.engine == "mktorrent":
-            if self.mktorrent_available:
-                return "mktorrent"
-            else:
-                logger.warning("mktorrent不可用，回退到Python引擎")
-                return "python"
-        else:  # auto
-            # 智能选择引擎 - 修复：优先使用mktorrent
-            cpu_info = self.hardware.get_cpu_info()
-            memory_info = self.hardware.get_memory_info()
 
-            # 优先使用mktorrent（C语言实现，性能更优）
-            if self.mktorrent_available:
-                # 高性能机器使用mktorrent充分利用多核优势
-                if (cpu_info['logical_cores'] >= 8 and
-                    memory_info['total_gb'] >= 8):
-                    print(f"  🚀 检测到高性能环境（{cpu_info['logical_cores']}线程，{memory_info['total_gb']:.1f}GB内存），使用mktorrent引擎")
-                    return "mktorrent"
-                else:
-                    # 中低配置也优先使用mktorrent
-                    print(f"  🔧 使用mktorrent引擎（{cpu_info['logical_cores']}线程）")
-                    return "mktorrent"
-            else:
-                # mktorrent不可用时回退到Python引擎
-                logger.warning("mktorrent不可用，使用Python引擎")
-                return "python"
 
-    def get_engine_info(self) -> Dict[str, Any]:
-        """获取引擎信息"""
-        cpu_info = self.hardware.get_cpu_info()
-        memory_info = self.hardware.get_memory_info()
 
-        return {
-            'selected_engine': self.selected_engine,
-            'mktorrent_available': self.mktorrent_available,
-            'python_available': self.python_available,
-            'mktorrent_version': self._get_mktorrent_version(),
-            'hardware_info': {
-                'logical_cores': cpu_info['logical_cores'],
-                'physical_cores': cpu_info['physical_cores'],
-                'total_memory_gb': memory_info['total_gb'],
-                'available_memory_gb': memory_info['available_gb']
-            },
-            'optimal_threads': self.hardware.calculate_optimal_workers('hash')
-        }
 
-    def test_engine_performance(self) -> Dict[str, Any]:
-        """测试引擎性能（用于远程服务器调试）"""
-        print("🔍 正在测试引擎性能...")
 
-        # 硬件信息
-        cpu_info = self.hardware.get_cpu_info()
-        memory_info = self.hardware.get_memory_info()
-        io_perf = self.hardware.benchmark_io_performance(10)  # 10MB测试
-
-        # 引擎选择测试
-        original_engine = self.engine
-
-        results = {
-            'hardware': {
-                'cpu_cores': cpu_info['logical_cores'],
-                'memory_gb': memory_info['total_gb'],
-                'io_performance': io_perf
-            },
-            'engine_selection': {}
-        }
-
-        # 测试不同引擎选择
-        for engine in ['auto', 'mktorrent', 'python']:
-            self.engine = engine
-            selected = self._select_optimal_engine()
-            results['engine_selection'][engine] = selected
-
-        # 恢复原始设置
-        self.engine = original_engine
-        self.selected_engine = self._select_optimal_engine()
-
-        print(f"  💻 CPU: {cpu_info['logical_cores']}线程")
-        print(f"  🧠 内存: {memory_info['total_gb']:.1f}GB")
-        print(f"  💾 I/O性能: 读取{io_perf['read_speed_mb_s']:.1f}MB/s, 哈希{io_perf['hash_speed_mb_s']:.1f}MB/s")
-        print(f"  🚀 推荐引擎: {self.selected_engine}")
-        print(f"  🧵 最优线程数: {self.hardware.calculate_optimal_workers('hash')}")
-
-        return results
 
     def _ensure_output_dir(self) -> None:
         try:
@@ -3096,16 +2555,9 @@ class TorrentCreator:
         if piece_size:
             command.extend(['-l', str(piece_size)])
 
-        # 启用多线程处理（智能硬件优化）
-        thread_count = self.hardware.calculate_optimal_workers('hash')
-
-        # 针对远程服务器的特殊优化
-        cpu_info = self.hardware.get_cpu_info()
-        if cpu_info['logical_cores'] >= 16:
-            # 高性能服务器进一步优化
-            thread_count = min(thread_count, cpu_info['logical_cores'] - 2)  # 为系统保留2个线程
-            print(f"  🚀 远程高性能服务器优化: 使用{thread_count}/{cpu_info['logical_cores']}线程")
-
+        # 启用多线程处理
+        import os
+        thread_count = min(os.cpu_count() or 4, 8)  # 最多使用8个线程
         command.extend(['-t', str(thread_count)])
         print(f"  🧵 mktorrent线程数: {thread_count}")
 
@@ -3139,9 +2591,7 @@ class TorrentCreator:
     def create_torrent(self, source_path: Union[str, Path],
                       custom_name: str = None,
                       progress_callback = None) -> Optional[str]:
-        """创建种子文件 - v1.7.0高性能双引擎版本"""
-        self.performance_monitor.start_timer('total_torrent_creation')
-
+        """创建种子文件 - 使用 mktorrent"""
         try:
             source_path = Path(source_path)
 
@@ -3158,85 +2608,31 @@ class TorrentCreator:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_file = self.output_dir / f"{torrent_name}_{timestamp}.torrent"
 
-            # 智能计算piece大小（高性能优化）
-            piece_size_bytes = None
-            piece_size_log2 = None
-
+            # 计算piece大小
             if self.piece_size == "auto":
-                self.performance_monitor.start_timer('piece_size_calculation')
-                try:
-                    if source_path.is_dir():
-                        total_size = self._get_directory_size(source_path)
-                    else:
-                        total_size = source_path.stat().st_size
+                if source_path.is_dir():
+                    total_size = self._get_directory_size(source_path)
+                else:
+                    total_size = source_path.stat().st_size
 
-                    # 使用优化的快速计算方法
-                    piece_size_log2 = self._calculate_piece_size(total_size)
-                    piece_size_bytes = 2 ** piece_size_log2
-
-                    # 记录优化信息
-                    piece_size_kb, _ = self._get_optimal_piece_size_fast(total_size)
-                    print(f"  🎯 智能选择 Piece 大小: {piece_size_kb}KB (文件大小: {total_size // (1024*1024)}MB)")
-                    print(f"  🚀 使用引擎: {self.selected_engine.upper()}")
-
-                finally:
-                    self.performance_monitor.end_timer('piece_size_calculation')
+                piece_size_log2 = self._calculate_piece_size(total_size)
+                piece_size_kb = (2 ** piece_size_log2) // 1024
+                print(f"  🎯 自动选择 Piece 大小: {piece_size_kb}KB (文件大小: {total_size // (1024*1024)}MB)")
             elif isinstance(self.piece_size, int):
-                # 如果用户设置的是KB值，需要转换
+                # 如果用户设置的是KB值，需要转换为log2
                 import math
                 piece_size_bytes = self.piece_size * 1024
                 piece_size_log2 = int(math.log2(piece_size_bytes))
-
-            # 根据选择的引擎创建种子
-            if self.selected_engine == "python":
-                return self._create_torrent_python(source_path, output_file, piece_size_bytes, progress_callback)
             else:
-                return self._create_torrent_mktorrent(source_path, output_file, piece_size_log2, progress_callback)
+                piece_size_log2 = 18  # 默认256KB
+
+            # 使用 mktorrent 创建种子
+            return self._create_torrent_mktorrent(source_path, output_file, piece_size_log2, progress_callback)
 
         except Exception as e:
             raise TorrentCreationError(f"创建种子文件时发生未知错误: {e}")
 
-        finally:
-            total_duration = self.performance_monitor.end_timer('total_torrent_creation')
-            print(f"  📊 总耗时: {total_duration:.2f}s")
 
-    def _create_torrent_python(self, source_path: Path, output_file: Path,
-                              piece_size_bytes: int, progress_callback) -> str:
-        """使用Python引擎创建种子"""
-        self.performance_monitor.start_timer('python_engine_execution')
-
-        try:
-            if progress_callback:
-                progress_callback(f"正在使用Python引擎创建种子文件: {source_path.name}")
-
-            # 使用Python引擎创建种子数据
-            torrent_data = self.python_engine.create_torrent_data(
-                source_path=source_path,
-                piece_length=piece_size_bytes,
-                trackers=self.tracker_links,
-                comment=self.comment,
-                private=self.private
-            )
-
-            # 写入种子文件
-            with open(output_file, 'wb') as f:
-                f.write(torrent_data)
-
-            if not output_file.exists():
-                raise TorrentCreationError("种子文件创建失败：输出文件不存在")
-
-            # 验证种子文件
-            if not self.validate_torrent(output_file):
-                raise TorrentCreationError("种子文件验证失败")
-
-            if progress_callback:
-                progress_callback(f"种子文件创建成功: {output_file.name}")
-
-            return str(output_file)
-
-        finally:
-            python_duration = self.performance_monitor.end_timer('python_engine_execution')
-            print(f"  ⏱️ Python引擎执行时间: {python_duration:.2f}s")
 
     def _create_torrent_mktorrent(self, source_path: Path, output_file: Path,
                                  piece_size_log2: int, progress_callback) -> str:
@@ -3251,17 +2647,14 @@ class TorrentCreator:
         if progress_callback:
             progress_callback(f"正在使用mktorrent创建种子文件: {source_path.name}")
 
-        # 执行mktorrent命令（带性能监控）
-        self.performance_monitor.start_timer('mktorrent_execution')
+        # 执行mktorrent命令
         try:
-            # 优化的 subprocess 调用
             result = subprocess.run(
                 command,
                 capture_output=True,
                 text=True,
                 check=True,
                 timeout=3600,
-                # 优化环境变量，减少不必要的开销
                 env=dict(os.environ, LANG='C', LC_ALL='C')
             )
 
@@ -3277,10 +2670,6 @@ class TorrentCreator:
 
         except subprocess.TimeoutExpired:
             raise TorrentCreationError("种子创建超时")
-
-        finally:
-            mktorrent_duration = self.performance_monitor.end_timer('mktorrent_execution')
-            print(f"  ⏱️ mktorrent执行时间: {mktorrent_duration:.2f}s")
 
         if not output_file.exists():
             raise TorrentCreationError("种子文件创建失败：输出文件不存在")
@@ -3787,7 +3176,7 @@ class TorrentMakerApp:
         """显示程序头部信息"""
         print("🎬" + "=" * 60)
         print(f"           {FULL_VERSION_INFO}")
-        print("           基于 mktorrent 的半自动化种子制作工具")
+        print("           基于 mktorrent 的种子制作工具")
         print("=" * 62)
         print()
         print(f"🎯 v{VERSION} {VERSION_NAME}更新:")
@@ -4756,35 +4145,6 @@ class TorrentMakerApp:
 def main():
     """主函数"""
     try:
-        # 检查是否是性能测试模式
-        if len(sys.argv) > 1 and sys.argv[1] == '--test-performance':
-            print("🚀 Torrent Maker v1.7.3 - 引擎性能测试")
-            print("=" * 50)
-
-            # 创建临时配置进行测试
-            config = ConfigManager()
-            tracker_links = config.get_trackers()
-
-            creator = TorrentCreator(
-                tracker_links=tracker_links,
-                engine="auto"
-            )
-
-            # 运行性能测试
-            results = creator.test_engine_performance()
-
-            print("\n📊 测试结果:")
-            print(f"  🔧 自动选择引擎: {results['engine_selection']['auto']}")
-            print(f"  🚀 mktorrent可用: {'是' if creator.mktorrent_available else '否'}")
-
-            if creator.mktorrent_available:
-                print(f"  ✅ 推荐使用mktorrent引擎以获得最佳性能")
-            else:
-                print(f"  ⚠️  mktorrent不可用，将使用Python引擎")
-                print(f"  💡 建议安装mktorrent: apt-get install mktorrent")
-
-            return
-
         app = TorrentMakerApp()
         app.run()
     except Exception as e:
