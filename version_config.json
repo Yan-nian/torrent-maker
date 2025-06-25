@@ -25,6 +25,10 @@
                     "replacement": "🚀 v{version} 修复更新:"
                 },
                 {
+                    "pattern": "� v(\\d+\\.\\d+\\.\\d+) 性能优化更新:",
+                    "replacement": "� v{version} 性能优化更新:"
+                },
+                {
                     "pattern": "Torrent Maker v(\\d+\\.\\d+\\.\\d+) - 高性能优化版",
                     "replacement": "Torrent Maker v{version} - 高性能优化版"
                 },
