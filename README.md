@@ -1,8 +1,8 @@
-# 🎬 Torrent Maker v1.8.1 - 搜索功能修复版
+# 🎬 Torrent Maker v1.9.0 - 性能监控增强版
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.8.1-blue.svg)
+![Version](https://img.shields.io/badge/version-1.9.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.7+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)
@@ -16,14 +16,14 @@
 
 ---
 
-## 🎯 v1.8.1 搜索功能修复版本
+## 🎯 v1.9.0 性能监控增强版本
 
-### 🐛 v1.8.1 搜索功能修复
-- **修复搜索功能 AttributeError**: 解决 `'FileMatcher' object has no attribute 'performance_monitor'` 错误
-- **添加缺失的性能监控组件初始化**: 确保所有组件正确初始化
-- **恢复搜索功能正常运行**: 搜索功能完全恢复正常
-- **性能统计信息正确显示**: 修复性能监控显示问题
-- **程序启动和运行稳定**: 提升整体稳定性
+### 🚀 v1.9.0 性能监控全面升级
+- **⏰ 制种时间显示功能**: 详细显示开始时间、完成时间、总耗时和各阶段耗时
+- **🧵 智能多线程检测**: 自动检测系统CPU核心数，智能计算最优线程数配置
+- **📊 详细性能信息展示**: 制种速度、效率分析、文件大小统计等完整性能数据
+- **🎨 用户界面优化**: 清晰的信息布局、丰富的视觉提示和结构化输出
+- **💡 智能性能建议**: 根据系统状态和制种表现提供针对性优化建议
 
 ### ⚡ 继承 v1.7.1 所有性能优化
 - **制种速度大幅提升**：Piece Size 策略全面优化，提升4倍

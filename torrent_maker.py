@@ -2,13 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v1.8.1
+Torrent Maker - 单文件版本 v1.9.0
 基于 mktorrent 的高性能半自动化种子制作工具
 
-🎯 v1.8.1 搜索功能修复版本:
-- 🐛 修复搜索功能 AttributeError 错误
-- 🔧 添加缺失的性能监控组件初始化
-- ⚡ 恢复搜索功能正常运行
+🎯 v1.9.0 性能监控增强版本:
+- ⏰ 新增制种时间显示功能（开始时间、完成时间、总耗时）
+- 🧵 智能多线程检测与优化（自动检测最优线程数）
+- 📊 详细性能信息展示（制种速度、效率分析、性能建议）
+- 🎨 用户界面优化（清晰的信息布局和视觉提示）
+- 💡 智能性能建议系统（根据系统状态提供优化建议）
 
 🎯 v1.6.0 彻底重构版本:
 - 🗂️ 项目结构彻底简化，移除所有模块化组件
@@ -44,7 +46,7 @@ Torrent Maker - 单文件版本 v1.8.1
 
 作者：Torrent Maker Team
 许可证：MIT
-版本：1.8.1
+版本：1.9.0
 """
 
 import os
@@ -68,8 +70,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "1.8.2"
-VERSION_NAME = "属性初始化修复版"
+VERSION = "1.9.0"
+VERSION_NAME = "性能监控增强版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
@@ -2608,8 +2610,154 @@ class TorrentCreator:
         sanitized = sanitized.strip(' .')
         return sanitized if sanitized else "torrent"
 
+    def _format_duration(self, duration_seconds: float) -> str:
+        """格式化时间显示（支持分钟:秒和小时:分钟:秒格式）"""
+        total_seconds = int(duration_seconds)
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        if hours > 0:
+            return f"{hours}:{minutes:02d}:{seconds:02d}"
+        else:
+            return f"{minutes}:{seconds:02d}"
+
+    def _format_file_size(self, size_bytes: int) -> str:
+        """格式化文件大小显示"""
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if size_bytes < 1024.0:
+                return f"{size_bytes:.1f} {unit}"
+            size_bytes /= 1024.0
+        return f"{size_bytes:.1f} PB"
+
+    def _calculate_creation_speed(self, file_size_bytes: int, duration_seconds: float) -> str:
+        """计算制种速度"""
+        if duration_seconds <= 0:
+            return "N/A"
+
+        speed_bytes_per_sec = file_size_bytes / duration_seconds
+
+        # 转换为合适的单位
+        if speed_bytes_per_sec >= 1024 * 1024 * 1024:  # GB/s
+            speed = speed_bytes_per_sec / (1024 * 1024 * 1024)
+            return f"{speed:.2f} GB/s"
+        elif speed_bytes_per_sec >= 1024 * 1024:  # MB/s
+            speed = speed_bytes_per_sec / (1024 * 1024)
+            return f"{speed:.2f} MB/s"
+        elif speed_bytes_per_sec >= 1024:  # KB/s
+            speed = speed_bytes_per_sec / 1024
+            return f"{speed:.2f} KB/s"
+        else:  # B/s
+            return f"{speed_bytes_per_sec:.2f} B/s"
+
+    def _detect_optimal_threads(self, file_size_bytes: int = 0) -> dict:
+        """智能检测最优线程数配置"""
+        import os
+
+        # 获取系统信息
+        cpu_count = os.cpu_count() or 4
+        try:
+            # 获取系统负载（仅在支持的系统上）
+            load_avg = os.getloadavg()[0] if hasattr(os, 'getloadavg') else 0
+            # 简单的内存检测（通过可用内存估算）
+            try:
+                with open('/proc/meminfo', 'r') as f:
+                    meminfo = f.read()
+                    total_mem = int([line for line in meminfo.split('\n') if 'MemTotal' in line][0].split()[1])
+                    available_mem = int([line for line in meminfo.split('\n') if 'MemAvailable' in line][0].split()[1])
+                    memory_usage_percent = (1 - available_mem / total_mem) * 100
+            except:
+                memory_usage_percent = 50  # 默认值
+        except:
+            load_avg = 0
+            memory_usage_percent = 50  # 默认值
+
+        # 基础线程数计算
+        base_threads = cpu_count
+
+        # 根据文件大小调整
+        if file_size_bytes > 0:
+            file_size_gb = file_size_bytes / (1024 * 1024 * 1024)
+            if file_size_gb < 1:  # 小文件
+                base_threads = min(base_threads, 4)
+            elif file_size_gb < 10:  # 中等文件
+                base_threads = min(base_threads, 6)
+            # 大文件使用更多线程
+
+        # 根据系统负载调整
+        if load_avg > cpu_count * 0.8:  # 系统负载较高
+            base_threads = max(2, int(base_threads * 0.7))
+
+        # 根据内存使用情况调整
+        if memory_usage_percent > 85:  # 内存使用率过高
+            base_threads = max(2, int(base_threads * 0.8))
+
+        # mktorrent 的最优线程数通常不超过8
+        optimal_threads = min(base_threads, 8)
+
+        # 确保至少使用2个线程
+        optimal_threads = max(optimal_threads, 2)
+
+        return {
+            'cpu_count': cpu_count,
+            'optimal_threads': optimal_threads,
+            'load_avg': load_avg,
+            'memory_usage_percent': memory_usage_percent,
+            'file_size_gb': file_size_bytes / (1024 * 1024 * 1024) if file_size_bytes > 0 else 0,
+            'recommendation': self._get_thread_recommendation(optimal_threads, cpu_count, file_size_bytes)
+        }
+
+    def _get_thread_recommendation(self, optimal_threads: int, cpu_count: int, file_size_bytes: int) -> str:
+        """获取线程配置建议"""
+        file_size_gb = file_size_bytes / (1024 * 1024 * 1024) if file_size_bytes > 0 else 0
+
+        if optimal_threads == cpu_count:
+            return "使用全部CPU核心，性能最佳"
+        elif optimal_threads < cpu_count * 0.5:
+            return "系统负载较高，使用较少线程避免过载"
+        elif file_size_gb < 1:
+            return "小文件优化，使用适中线程数"
+        elif file_size_gb > 10:
+            return "大文件处理，使用更多线程加速"
+        else:
+            return "根据系统状态智能调整"
+
+    def _show_performance_suggestions(self, file_size_bytes: int, total_duration: float, mktorrent_duration: float):
+        """显示性能优化建议"""
+        file_size_gb = file_size_bytes / (1024 * 1024 * 1024)
+        suggestions = []
+
+        # 基于制种速度的建议
+        speed_mbps = (file_size_bytes / (1024 * 1024)) / total_duration if total_duration > 0 else 0
+
+        if speed_mbps < 50:  # 低于50MB/s
+            suggestions.append("制种速度较慢，建议检查磁盘性能或减少系统负载")
+        elif speed_mbps > 500:  # 高于500MB/s
+            suggestions.append("制种速度优秀！当前配置表现良好")
+
+        # 基于文件大小的建议
+        if file_size_gb > 50:
+            suggestions.append("大文件制种，建议使用SSD存储以提升性能")
+        elif file_size_gb < 0.1:
+            suggestions.append("小文件制种，当前配置已足够")
+
+        # 基于效率的建议
+        efficiency = (mktorrent_duration / total_duration) * 100 if total_duration > 0 else 0
+        if efficiency < 70:
+            suggestions.append("准备阶段耗时较长，可能是磁盘I/O或文件扫描导致")
+        elif efficiency > 95:
+            suggestions.append("mktorrent执行效率很高，系统配置优秀")
+
+        # 显示建议
+        if suggestions:
+            print(f"\n  💡 性能建议:")
+            for i, suggestion in enumerate(suggestions, 1):
+                print(f"     {i}. {suggestion}")
+        else:
+            print(f"\n  💡 性能表现良好，无特殊建议")
+
     def _build_command(self, source_path: Path, output_file: Path,
-                      piece_size: int = None) -> List[str]:
+                      piece_size: int = None, file_size_bytes: int = 0) -> List[str]:
         """构建优化的 mktorrent 命令"""
         command = ['mktorrent']
 
@@ -2628,11 +2776,21 @@ class TorrentCreator:
         if piece_size:
             command.extend(['-l', str(piece_size)])
 
-        # 启用多线程处理
-        import os
-        thread_count = min(os.cpu_count() or 4, 8)  # 最多使用8个线程
+        # 智能多线程处理
+        thread_info = self._detect_optimal_threads(file_size_bytes)
+        thread_count = thread_info['optimal_threads']
+
         command.extend(['-t', str(thread_count)])
-        print(f"  🧵 mktorrent线程数: {thread_count}")
+
+        # 显示详细的线程配置信息
+        print(f"  🖥️  系统CPU核心数: {thread_info['cpu_count']}")
+        print(f"  🧵 最优线程数: {thread_count}")
+        if thread_info['load_avg'] > 0:
+            print(f"  📊 系统负载: {thread_info['load_avg']:.2f}")
+        print(f"  💾 内存使用率: {thread_info['memory_usage_percent']:.1f}%")
+        if thread_info['file_size_gb'] > 0:
+            print(f"  📁 文件大小: {thread_info['file_size_gb']:.2f} GB")
+        print(f"  💡 配置建议: {thread_info['recommendation']}")
 
         # 私有种子标记
         if self.private:
@@ -2665,6 +2823,10 @@ class TorrentCreator:
                       custom_name: str = None,
                       progress_callback = None) -> Optional[str]:
         """创建种子文件 - 使用 mktorrent"""
+        # 记录制种开始时间
+        creation_start_time = time.time()
+        start_time_str = datetime.now().strftime("%H:%M:%S")
+
         try:
             source_path = Path(source_path)
 
@@ -2681,7 +2843,7 @@ class TorrentCreator:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_file = self.output_dir / f"{torrent_name}_{timestamp}.torrent"
 
-            # 计算piece大小
+            # 计算文件大小和piece大小
             if self.piece_size == "auto":
                 if source_path.is_dir():
                     total_size = self._get_directory_size(source_path)
@@ -2690,27 +2852,48 @@ class TorrentCreator:
 
                 piece_size_log2 = self._calculate_piece_size(total_size)
                 piece_size_kb = (2 ** piece_size_log2) // 1024
-                print(f"  🎯 自动选择 Piece 大小: {piece_size_kb}KB (文件大小: {total_size // (1024*1024)}MB)")
+                print(f"  🎯 自动选择 Piece 大小: {piece_size_kb}KB (文件大小: {self._format_file_size(total_size)})")
             elif isinstance(self.piece_size, int):
                 # 如果用户设置的是KB值，需要转换为log2
                 import math
                 piece_size_bytes = self.piece_size * 1024
                 piece_size_log2 = int(math.log2(piece_size_bytes))
+                # 获取文件大小用于性能统计
+                if source_path.is_dir():
+                    total_size = self._get_directory_size(source_path)
+                else:
+                    total_size = source_path.stat().st_size
             else:
                 piece_size_log2 = 18  # 默认256KB
+                # 获取文件大小用于性能统计
+                if source_path.is_dir():
+                    total_size = self._get_directory_size(source_path)
+                else:
+                    total_size = source_path.stat().st_size
+
+            print(f"  ⏰ 制种开始时间: {start_time_str}")
 
             # 使用 mktorrent 创建种子
-            return self._create_torrent_mktorrent(source_path, output_file, piece_size_log2, progress_callback)
+            result_path = self._create_torrent_mktorrent(source_path, output_file, piece_size_log2, progress_callback, total_size, creation_start_time)
+
+            return result_path
 
         except Exception as e:
+            # 即使出错也显示耗时
+            creation_duration = time.time() - creation_start_time
+            print(f"  ❌ 制种失败，耗时: {self._format_duration(creation_duration)}")
             raise TorrentCreationError(f"创建种子文件时发生未知错误: {e}")
 
 
 
     def _create_torrent_mktorrent(self, source_path: Path, output_file: Path,
-                                 piece_size_log2: int, progress_callback) -> str:
+                                 piece_size_log2: int, progress_callback,
+                                 file_size_bytes: int = 0, creation_start_time: float = None) -> str:
         """使用mktorrent创建种子"""
-        command = self._build_command(source_path, output_file, piece_size_log2)
+        # 记录mktorrent执行开始时间
+        mktorrent_start_time = time.time()
+
+        command = self._build_command(source_path, output_file, piece_size_log2, file_size_bytes)
 
         # 记录调试信息
         if piece_size_log2:
@@ -2719,6 +2902,8 @@ class TorrentCreator:
 
         if progress_callback:
             progress_callback(f"正在使用mktorrent创建种子文件: {source_path.name}")
+
+        print(f"  🚀 开始执行 mktorrent...")
 
         # 执行mktorrent命令
         try:
@@ -2744,12 +2929,52 @@ class TorrentCreator:
         except subprocess.TimeoutExpired:
             raise TorrentCreationError("种子创建超时")
 
+        # 计算mktorrent执行时间
+        mktorrent_duration = time.time() - mktorrent_start_time
+
         if not output_file.exists():
             raise TorrentCreationError("种子文件创建失败：输出文件不存在")
 
         # 验证种子文件
         if not self.validate_torrent(output_file):
             raise TorrentCreationError("种子文件验证失败")
+
+        # 计算总制种时间和显示性能统计
+        if creation_start_time:
+            total_duration = time.time() - creation_start_time
+            end_time_str = datetime.now().strftime("%H:%M:%S")
+
+            # 获取种子文件大小
+            torrent_file_size = output_file.stat().st_size if output_file.exists() else 0
+
+            print(f"\n  🎉 制种完成！")
+            print(f"  ✅ 完成时间: {end_time_str}")
+            print(f"  ⏱️  总耗时: {self._format_duration(total_duration)}")
+            print(f"  🔧 mktorrent耗时: {self._format_duration(mktorrent_duration)}")
+
+            # 计算准备时间（总时间 - mktorrent时间）
+            prep_duration = total_duration - mktorrent_duration
+            if prep_duration > 0.1:  # 只有当准备时间超过0.1秒时才显示
+                print(f"  ⚙️  准备耗时: {self._format_duration(prep_duration)}")
+
+            # 显示详细性能统计信息
+            if file_size_bytes > 0:
+                file_size_str = self._format_file_size(file_size_bytes)
+                creation_speed = self._calculate_creation_speed(file_size_bytes, total_duration)
+                mktorrent_speed = self._calculate_creation_speed(file_size_bytes, mktorrent_duration)
+
+                print(f"\n  📊 性能统计:")
+                print(f"     📁 源文件大小: {file_size_str}")
+                print(f"     📄 种子文件大小: {self._format_file_size(torrent_file_size)}")
+                print(f"     🚀 总体制种速度: {creation_speed}")
+                print(f"     ⚡ mktorrent速度: {mktorrent_speed}")
+
+                # 计算效率指标
+                efficiency = (mktorrent_duration / total_duration) * 100 if total_duration > 0 else 0
+                print(f"     📈 制种效率: {efficiency:.1f}% (mktorrent占比)")
+
+                # 提供性能建议
+                self._show_performance_suggestions(file_size_bytes, total_duration, mktorrent_duration)
 
         if progress_callback:
             progress_callback(f"种子文件创建成功: {output_file.name}")
@@ -3253,11 +3478,11 @@ class TorrentMakerApp:
         print("=" * 62)
         print()
         print(f"🎯 v{VERSION} {VERSION_NAME}更新:")
-        print("  🔧 修复TorrentCreator类属性初始化问题")
-        print("  ✅ 解决'_piece_size_cache'属性缺失错误")
-        print("  🚀 修复async_processor和stream_processor初始化")
-        print("  🐛 彻底解决制种过程中的属性错误")
-        print("  ⚡ 确保所有组件正确初始化和运行")
+        print("  ⏰ 新增制种时间显示功能（开始/完成时间、总耗时）")
+        print("  🧵 智能多线程检测与优化（自动检测最优线程数）")
+        print("  📊 详细性能信息展示（制种速度、效率分析）")
+        print("  🎨 用户界面优化（清晰布局和视觉提示）")
+        print("  💡 智能性能建议系统（根据系统状态优化）")
         print()
         print("🎯 v1.6.0 彻底重构更新:")
         print("  🗂️ 项目结构彻底简化，移除模块化组件")
@@ -3423,10 +3648,18 @@ class TorrentMakerApp:
             folder_path = folder_info['path']
             folder_name = folder_info['name']
 
-            print(f"\n🔄 正在为 '{folder_name}' 创建种子...")
+            # 显示开始信息
+            print(f"\n" + "="*60)
+            print(f"🔄 开始制种: {folder_name}")
+            print(f"📁 源路径: {folder_path}")
+            print(f"⏰ 开始时间: {datetime.now().strftime('%H:%M:%S')}")
+            print("="*60)
 
             def progress_callback(message):
                 print(f"  📈 {message}")
+
+            # 记录开始时间用于总体统计
+            start_time = time.time()
 
             torrent_path = self.creator.create_torrent(
                 folder_path,
@@ -3435,23 +3668,36 @@ class TorrentMakerApp:
             )
 
             if torrent_path and self.creator.validate_torrent(torrent_path):
-                print(f"✅ 种子创建成功: {os.path.basename(torrent_path)}")
+                # 计算总耗时
+                total_time = time.time() - start_time
+
+                print(f"\n🎉 制种成功完成!")
+                print(f"✅ 种子文件: {os.path.basename(torrent_path)}")
+                print(f"📍 保存位置: {os.path.dirname(torrent_path)}")
+                print(f"⏱️  总耗时: {self.creator._format_duration(total_time)}")
+                print("="*60)
                 return True
             else:
+                print(f"\n❌ 制种失败!")
                 print(f"❌ 种子创建失败或验证失败")
+                print("="*60)
                 return False
 
         except Exception as e:
-            print(f"❌ 创建种子时发生错误: {e}")
+            print(f"\n❌ 制种过程中发生错误!")
+            print(f"❌ 错误信息: {e}")
+            print("="*60)
             return False
 
     def quick_create(self):
         """快速制种"""
-        print("\n⚡ 快速制种模式")
+        print("\n" + "="*60)
+        print("⚡ 快速制种模式")
+        print("="*60)
         print("支持格式:")
         print("  - 单个路径: /path/to/folder")
         print("  - 多个路径: /path1;/path2;/path3")
-        print()
+        print("="*60)
 
         paths_input = input("请输入文件夹路径: ").strip()
         if not paths_input:
@@ -3459,10 +3705,19 @@ class TorrentMakerApp:
 
         paths = [p.strip() for p in paths_input.split(';') if p.strip()]
 
+        # 显示任务概览
+        print(f"\n📋 任务概览:")
+        print(f"   📁 待处理路径数: {len(paths)}")
+        print(f"   ⏰ 开始时间: {datetime.now().strftime('%H:%M:%S')}")
+
+        # 记录总开始时间
+        total_start_time = time.time()
         success_count = 0
-        for path in paths:
+
+        for i, path in enumerate(paths, 1):
             expanded_path = os.path.expanduser(path)
             if os.path.exists(expanded_path):
+                print(f"\n[{i}/{len(paths)}] 处理路径: {expanded_path}")
                 folder_info = {
                     'path': expanded_path,
                     'name': os.path.basename(expanded_path)
@@ -3470,9 +3725,18 @@ class TorrentMakerApp:
                 if self._create_single_torrent(folder_info):
                     success_count += 1
             else:
-                print(f"❌ 路径不存在: {expanded_path}")
+                print(f"\n[{i}/{len(paths)}] ❌ 路径不存在: {expanded_path}")
 
-        print(f"\n🎉 快速制种完成: 成功 {success_count}/{len(paths)}")
+        # 显示总结
+        total_duration = time.time() - total_start_time
+        print(f"\n" + "="*60)
+        print(f"🎉 快速制种任务完成!")
+        print(f"✅ 成功: {success_count}/{len(paths)}")
+        if success_count < len(paths):
+            print(f"❌ 失败: {len(paths) - success_count}/{len(paths)}")
+        print(f"⏱️  总耗时: {self.creator._format_duration(total_duration)}")
+        print(f"🏁 完成时间: {datetime.now().strftime('%H:%M:%S')}")
+        print("="*60)
 
     def batch_create(self):
         """统一的批量制种功能"""
