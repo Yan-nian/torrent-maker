@@ -73,8 +73,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "1.7.2"
-VERSION_NAME = "高性能Python引擎版"
+VERSION = "1.7.3"
+VERSION_NAME = "远程服务器优化版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 # ================== 硬件检测和自适应优化 ==================
@@ -195,8 +195,12 @@ class HardwareDetector:
                 base_workers = min(base_workers * 2, 32)
             return base_workers
         elif task_type == 'hash':
-            # 哈希计算：平衡CPU和内存
-            return min(logical_cores, 16)
+            # 哈希计算：平衡CPU和内存，针对远程服务器优化
+            if logical_cores >= 16:
+                # 高性能服务器（如您的20线程Xeon）充分利用所有核心
+                return min(logical_cores, 24)  # 最多24线程，为系统保留一些资源
+            else:
+                return min(logical_cores, 16)
         else:
             return logical_cores
 
@@ -2926,33 +2930,83 @@ class TorrentCreator:
                 logger.warning("mktorrent不可用，回退到Python引擎")
                 return "python"
         else:  # auto
-            # 智能选择引擎
+            # 智能选择引擎 - 修复：优先使用mktorrent
             cpu_info = self.hardware.get_cpu_info()
             memory_info = self.hardware.get_memory_info()
 
-            # 高性能机器优先使用Python引擎
-            if (cpu_info['logical_cores'] >= 8 and
-                memory_info['total_gb'] >= 8 and
-                memory_info['available_gb'] >= 4):
-                return "python"
-
-            # 低配置机器使用mktorrent（如果可用）
+            # 优先使用mktorrent（C语言实现，性能更优）
             if self.mktorrent_available:
-                return "mktorrent"
+                # 高性能机器使用mktorrent充分利用多核优势
+                if (cpu_info['logical_cores'] >= 8 and
+                    memory_info['total_gb'] >= 8):
+                    print(f"  🚀 检测到高性能环境（{cpu_info['logical_cores']}线程，{memory_info['total_gb']:.1f}GB内存），使用mktorrent引擎")
+                    return "mktorrent"
+                else:
+                    # 中低配置也优先使用mktorrent
+                    print(f"  🔧 使用mktorrent引擎（{cpu_info['logical_cores']}线程）")
+                    return "mktorrent"
             else:
+                # mktorrent不可用时回退到Python引擎
+                logger.warning("mktorrent不可用，使用Python引擎")
                 return "python"
 
     def get_engine_info(self) -> Dict[str, Any]:
         """获取引擎信息"""
+        cpu_info = self.hardware.get_cpu_info()
+        memory_info = self.hardware.get_memory_info()
+
         return {
             'selected_engine': self.selected_engine,
             'mktorrent_available': self.mktorrent_available,
             'python_available': self.python_available,
+            'mktorrent_version': self._get_mktorrent_version(),
             'hardware_info': {
-                'cpu': self.hardware.get_cpu_info(),
-                'memory': self.hardware.get_memory_info()
-            }
+                'logical_cores': cpu_info['logical_cores'],
+                'physical_cores': cpu_info['physical_cores'],
+                'total_memory_gb': memory_info['total_gb'],
+                'available_memory_gb': memory_info['available_gb']
+            },
+            'optimal_threads': self.hardware.calculate_optimal_workers('hash')
         }
+
+    def test_engine_performance(self) -> Dict[str, Any]:
+        """测试引擎性能（用于远程服务器调试）"""
+        print("🔍 正在测试引擎性能...")
+
+        # 硬件信息
+        cpu_info = self.hardware.get_cpu_info()
+        memory_info = self.hardware.get_memory_info()
+        io_perf = self.hardware.benchmark_io_performance(10)  # 10MB测试
+
+        # 引擎选择测试
+        original_engine = self.engine
+
+        results = {
+            'hardware': {
+                'cpu_cores': cpu_info['logical_cores'],
+                'memory_gb': memory_info['total_gb'],
+                'io_performance': io_perf
+            },
+            'engine_selection': {}
+        }
+
+        # 测试不同引擎选择
+        for engine in ['auto', 'mktorrent', 'python']:
+            self.engine = engine
+            selected = self._select_optimal_engine()
+            results['engine_selection'][engine] = selected
+
+        # 恢复原始设置
+        self.engine = original_engine
+        self.selected_engine = self._select_optimal_engine()
+
+        print(f"  💻 CPU: {cpu_info['logical_cores']}线程")
+        print(f"  🧠 内存: {memory_info['total_gb']:.1f}GB")
+        print(f"  💾 I/O性能: 读取{io_perf['read_speed_mb_s']:.1f}MB/s, 哈希{io_perf['hash_speed_mb_s']:.1f}MB/s")
+        print(f"  🚀 推荐引擎: {self.selected_engine}")
+        print(f"  🧵 最优线程数: {self.hardware.calculate_optimal_workers('hash')}")
+
+        return results
 
     def _ensure_output_dir(self) -> None:
         try:
@@ -3044,6 +3098,14 @@ class TorrentCreator:
 
         # 启用多线程处理（智能硬件优化）
         thread_count = self.hardware.calculate_optimal_workers('hash')
+
+        # 针对远程服务器的特殊优化
+        cpu_info = self.hardware.get_cpu_info()
+        if cpu_info['logical_cores'] >= 16:
+            # 高性能服务器进一步优化
+            thread_count = min(thread_count, cpu_info['logical_cores'] - 2)  # 为系统保留2个线程
+            print(f"  🚀 远程高性能服务器优化: 使用{thread_count}/{cpu_info['logical_cores']}线程")
+
         command.extend(['-t', str(thread_count)])
         print(f"  🧵 mktorrent线程数: {thread_count}")
 
@@ -4694,6 +4756,35 @@ class TorrentMakerApp:
 def main():
     """主函数"""
     try:
+        # 检查是否是性能测试模式
+        if len(sys.argv) > 1 and sys.argv[1] == '--test-performance':
+            print("🚀 Torrent Maker v1.7.3 - 引擎性能测试")
+            print("=" * 50)
+
+            # 创建临时配置进行测试
+            config = ConfigManager()
+            tracker_links = config.get_trackers()
+
+            creator = TorrentCreator(
+                tracker_links=tracker_links,
+                engine="auto"
+            )
+
+            # 运行性能测试
+            results = creator.test_engine_performance()
+
+            print("\n📊 测试结果:")
+            print(f"  🔧 自动选择引擎: {results['engine_selection']['auto']}")
+            print(f"  🚀 mktorrent可用: {'是' if creator.mktorrent_available else '否'}")
+
+            if creator.mktorrent_available:
+                print(f"  ✅ 推荐使用mktorrent引擎以获得最佳性能")
+            else:
+                print(f"  ⚠️  mktorrent不可用，将使用Python引擎")
+                print(f"  💡 建议安装mktorrent: apt-get install mktorrent")
+
+            return
+
         app = TorrentMakerApp()
         app.run()
     except Exception as e:
