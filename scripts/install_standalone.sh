@@ -32,19 +32,29 @@ command_exists() {
 
 # 获取版本号
 get_version() {
-    # 优先使用本地版本配置文件
-    if [ -f "./version_config.json" ] && command_exists python3; then
-        python3 -c "
-import json
+    # 从GitHub API获取最新发布版本
+    if command_exists curl; then
+        latest_version=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | \
+            python3 -c "
+import sys, json
 try:
-    with open('./version_config.json', 'r') as f:
-        config = json.load(f)
-    print(config.get('current_version', '1.5.0'))
+    data = json.load(sys.stdin)
+    tag = data.get('tag_name', '')
+    # 移除 'v' 前缀（如果存在）
+    version = tag.lstrip('v') if tag else '1.5.1'
+    print(version)
 except:
-    print('1.5.0')
-" 2>/dev/null
+    print('1.5.1')
+" 2>/dev/null)
+
+        # 如果获取失败，使用默认版本
+        if [ -z "$latest_version" ] || [ "$latest_version" = "1.5.1" ]; then
+            echo "1.5.1"
+        else
+            echo "$latest_version"
+        fi
     else
-        echo "1.5.0"
+        echo "1.5.1"
     fi
 }
 

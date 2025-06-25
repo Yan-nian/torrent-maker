@@ -480,7 +480,7 @@ class TorrentCreationError(Exception):
 
 # ================== 配置管理器 ==================
 class ConfigManager:
-    """配置管理器 - v1.4.0修复优化版本"""
+    """配置管理器 - v1.5.1修复优化版本"""
     
     DEFAULT_SETTINGS = {
         "resource_folder": "~/Downloads",
@@ -3133,7 +3133,7 @@ class SearchHistory:
 
 # ================== 主程序 ==================
 class TorrentMakerApp:
-    """Torrent Maker 主应用程序 - v1.4.0"""
+    """Torrent Maker 主应用程序 - v1.5.1"""
 
     def __init__(self):
         self.config = ConfigManager()
