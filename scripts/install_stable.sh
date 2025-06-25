@@ -18,7 +18,7 @@ readonly REPO_NAME="torrent-maker"
 readonly GITHUB_REPO="${REPO_OWNER}/${REPO_NAME}"
 
 # 默认配置
-readonly DEFAULT_VERSION="1.6.1"
+readonly DEFAULT_VERSION="1.7.0"
 readonly DEFAULT_INSTALL_DIR="$HOME/.local/bin"
 readonly DEFAULT_CONFIG_DIR="$HOME/.torrent_maker"
 

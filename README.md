@@ -1,8 +1,8 @@
-# 🎬 Torrent Maker v1.6.1 - 版本同步修复版
+# 🎬 Torrent Maker v1.7.0 - 性能优先优化版
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.6.1-blue.svg)
+![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.7+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)
@@ -16,18 +16,19 @@
 
 ---
 
-## 🎯 v1.6.1 版本同步修复版本
+## 🎯 v1.7.0 性能优先优化版本
 
-### 🔧 v1.6.1 更新内容
-- **修复版本显示不一致问题**：统一所有版本显示
-- **统一版本管理机制**：建立集中的版本常量管理
-- **优化用户界面显示**：确保版本信息准确显示
-- **全新安装脚本 v2.0**：企业级质量的现代化安装器
-  - 🎨 彩色输出和进度显示
-  - 🔧 智能依赖检查和自动安装
-  - 🛡️ 完善的错误处理和恢复机制
-  - 🌍 跨平台兼容性（macOS/Linux/Windows）
-  - 📋 多种安装模式（普通/静默/调试/强制）
+### ⚡ v1.7.0 重大性能优化
+- **制种速度大幅提升**：Piece Size 策略全面优化，提升4倍
+  - 小文件：16KB → 64KB
+  - 大文件：4MB → 16MB
+  - 20GB+ 文件制种时间减少 70%+
+- **搜索功能优化**：修复 "The Studio" 类搜索问题
+  - 短搜索词不移除停用词
+  - 增强连续词匹配算法
+  - 优化匹配权重分配
+- **多线程性能提升**：线程数优化至 CPU核心数×2，最大16线程
+- **性能监控调整**：适应新的高性能策略和阈值
 
 ## 🎯 v1.6.0 彻底重构版本
 
@@ -244,7 +245,7 @@ sudo pacman -S mktorrent
 
 ### 🔥 vs 传统工具
 
-| 对比项目 | 传统工具 | Torrent Maker v1.6.1 | 优势 |
+| 对比项目 | 传统工具 | Torrent Maker v1.7.0 | 优势 |
 |---------|---------|---------------------|------|
 | **安装复杂度** | 复杂配置 | 单文件下载即用 | **极简** |
 | **搜索速度** | 手动浏览 | 毫秒级智能搜索 | **100x** 更快 |

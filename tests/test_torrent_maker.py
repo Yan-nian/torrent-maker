@@ -204,13 +204,13 @@ class TestIntegration(unittest.TestCase):
 
     def test_version_info(self):
         """测试版本信息"""
-        # 检查版本字符串是否包含 1.6.1
+        # 检查版本字符串是否包含 1.7.0
         with open('torrent_maker.py', 'r', encoding='utf-8') as f:
             content = f.read()
-            self.assertIn('v1.6.1', content)
+            self.assertIn('v1.7.0', content)
             # 检查版本常量是否存在
-            self.assertIn('VERSION = "1.6.1"', content)
-            self.assertIn('VERSION_NAME = "版本同步修复版"', content)
+            self.assertIn('VERSION = "1.7.0"', content)
+            self.assertIn('VERSION_NAME = "性能优先优化版"', content)
 
 
 def run_tests():
