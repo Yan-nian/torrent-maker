@@ -1,15 +1,16 @@
 {
-    "resource_folder": "/Users/ershiwushideshuimian/Downloads",
-    "output_folder": "/Users/ershiwushideshuimian/Downloads/pack",
+    "resource_folder": "~/Downloads",
+    "output_folder": "~/Desktop/torrents",
     "default_piece_size": "auto",
     "private_torrent": false,
     "file_search_tolerance": 60,
     "max_search_results": 10,
     "auto_create_output_dir": true,
-    "default_trackers": [
-        "udp://tracker.openbittorrent.com:80",
-        "udp://tracker.opentrackr.org:1337/announce",
-        "udp://exodus.desync.com:6969/announce",
-        "udp://tracker.torrent.eu.org:451/announce"
-    ]
+    "enable_cache": true,
+    "cache_duration": 3600,
+    "max_concurrent_operations": 4,
+    "log_level": "WARNING",
+    "max_scan_depth": 3,
+    "max_scan_folders": 5000,
+    "max_scan_time": 30
 }

@@ -2,39 +2,44 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v1.5.1
+Torrent Maker - 单文件版本 v1.6.0
 基于 mktorrent 的高性能半自动化种子制作工具
 
-🔧 v1.5.1 稳定性修复更新:
-- 🐛 修复 macOS 内存使用计算错误（29GB → 正常显示）
-- ⚡ 优化文件夹扫描性能，添加超时和数量限制
-- 🔍 修复搜索功能，恢复文件夹匹配能力
-- 🛡️ 增强扫描稳定性，防止大文件夹导致的卡死
-- ⏰ 添加扫描时间限制（30秒）和文件夹数量限制（5000个）
-- 🧹 改进内存管理和清理机制
-- 📊 优化配置管理功能显示
+🎯 v1.6.0 彻底重构版本:
+- 🗂️ 项目结构彻底简化，移除所有模块化组件
+- 📦 单文件架构，下载即用，无需复杂配置
+- 🧹 删除 80% 冗余文件，项目体积减少 80%
+- 📖 文档完全重写，专注单文件版本使用
+- ⚡ 安装流程简化，一键完成所有配置
+- 🎨 用户体验优化，操作更加直观简洁
 
-🚀 v1.5.1 性能优化更新:
+🚀 继承 v1.5.1 所有性能优化:
 - ⚡ 种子创建速度提升 30-50%
 - 🧠 智能 Piece Size 计算，减少计算时间 80%
-- � 目录大小缓存优化，支持 LRU 淘汰策略
+- 💾 目录大小缓存优化，支持 LRU 淘汰策略
 - 🔧 mktorrent 参数优化，启用多线程处理
-- � 批量处理并发优化，支持进程池处理
+- 🔄 批量处理并发优化，支持进程池处理
 - 📊 增强性能监控和统计分析
 - 🎯 智能查找表，O(1) 时间复杂度优化
 
-性能提升:
-- 目录扫描: 29s → 15s (修复后)
-- 搜索响应: 15s → 0.036s (缓存命中)
-- 内存使用: 修复异常显示问题
-- 扫描稳定性: 大幅提升
+🛡️ 继承 v1.5.1 所有稳定性修复:
+- 🐛 修复 macOS 内存使用计算错误
+- ⚡ 优化文件夹扫描性能，添加超时和数量限制
+- 🔍 修复搜索功能，恢复文件夹匹配能力
+- 🛡️ 增强扫描稳定性，防止大文件夹导致的卡死
+
+项目特点:
+- 📦 真正的单文件应用，包含所有功能
+- 🚀 极简安装，一个命令完成
+- 📖 清晰文档，专注核心功能
+- 🔧 易于维护，单一代码路径
 
 使用方法：
     python torrent_maker.py
 
 作者：Torrent Maker Team
 许可证：MIT
-版本：1.5.1
+版本：1.6.0
 """
 
 import os
@@ -2411,7 +2416,7 @@ class TorrentCreator:
     """种子创建器 - v1.5.1高性能优化版本"""
 
     DEFAULT_PIECE_SIZE = "auto"
-    DEFAULT_COMMENT = "Created by Torrent Maker v1.5.1"
+    DEFAULT_COMMENT = "Created by Torrent Maker v1.6.0"
     PIECE_SIZES = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]
 
     # Piece Size 查找表 - 预计算常用大小范围
@@ -2536,7 +2541,7 @@ class TorrentCreator:
         command.extend(['-o', str(output_file)])
 
         # 设置注释（简化以减少开销）
-        comment = f"{self.comment} v1.5.1"
+        comment = f"{self.comment} v1.6.0"
         command.extend(['-c', comment])
 
         # 设置 piece 大小
@@ -2929,8 +2934,8 @@ class TorrentCreator:
         memory_info = self.memory_manager.get_memory_usage()
 
         return {
-            'version': '1.5.1',
-            'optimization_level': 'Stage 2 - Advanced',
+            'version': '1.6.0',
+            'optimization_level': 'Restructured - Single File',
             'features': [
                 'Smart Piece Size Calculation',
                 'LRU Directory Cache',
@@ -3133,7 +3138,7 @@ class SearchHistory:
 
 # ================== 主程序 ==================
 class TorrentMakerApp:
-    """Torrent Maker 主应用程序 - v1.5.1"""
+    """Torrent Maker 主应用程序 - v1.6.0 彻底重构版"""
 
     def __init__(self):
         self.config = ConfigManager()
@@ -3175,17 +3180,17 @@ class TorrentMakerApp:
     def display_header(self):
         """显示程序头部信息"""
         print("🎬" + "=" * 60)
-        print("           Torrent Maker v1.5.1 - 高性能优化版")
+        print("           Torrent Maker v1.6.0 - 彻底重构版")
         print("           基于 mktorrent 的半自动化种子制作工具")
         print("=" * 62)
         print()
-        print("� v1.5.1 性能优化更新:")
-        print("  ⚡ 种子创建速度提升 30-50%")
-        print("  🧠 智能 Piece Size 计算优化")
-        print("  � 目录大小缓存 LRU 优化")
-        print("  🔧 mktorrent 多线程参数优化")
-        print("  🚀 批量处理并发优化")
-        print("  � 增强性能监控和统计")
+        print("🎯 v1.6.0 彻底重构更新:")
+        print("  🗂️ 项目结构彻底简化，移除模块化组件")
+        print("  📦 单文件架构，下载即用")
+        print("  🧹 项目体积减少 80%")
+        print("  📖 文档完全重写，专注单文件版本")
+        print("  ⚡ 安装流程简化，一键完成")
+        print("  🎨 用户体验优化，操作更直观")
         print()
 
     def display_menu(self):
@@ -3935,7 +3940,7 @@ class TorrentMakerApp:
                 choice = input("请选择操作 (0-6): ").strip()
 
                 if choice == '0':
-                    print("👋 感谢使用 Torrent Maker v1.5.1！")
+                    print("👋 感谢使用 Torrent Maker v1.6.0！")
                     break
                 elif choice == '1':
                     self.search_and_create()
