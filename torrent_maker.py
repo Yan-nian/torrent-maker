@@ -73,7 +73,7 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "1.7.1"
+VERSION = "1.7.2"
 VERSION_NAME = "高性能Python引擎版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
@@ -2415,18 +2415,32 @@ class FileMatcher:
                             len(folders) >= max_folders):
                             break
 
-                        if entry.is_dir(follow_symlinks=False):
-                            folder_path = Path(entry.path)
-                            batch_folders.append(folder_path)
+                        try:
+                            if entry.is_dir(follow_symlinks=False):
+                                # 安全处理文件路径，避免编码问题
+                                try:
+                                    folder_path = Path(entry.path)
+                                    # 验证路径可以正确编码/解码
+                                    str(folder_path).encode('utf-8').decode('utf-8')
+                                    batch_folders.append(folder_path)
 
-                            # 只有在深度允许的情况下才添加到递归列表
-                            if current_depth + 1 < max_depth:
-                                subdirs_to_scan.append(folder_path)
+                                    # 只有在深度允许的情况下才添加到递归列表
+                                    if current_depth + 1 < max_depth:
+                                        subdirs_to_scan.append(folder_path)
 
-                            # 批量添加，减少内存分配
-                            if len(batch_folders) >= 50:  # 减少批量大小
-                                folders.extend(batch_folders)
-                                batch_folders.clear()
+                                    # 批量添加，减少内存分配
+                                    if len(batch_folders) >= 50:  # 减少批量大小
+                                        folders.extend(batch_folders)
+                                        batch_folders.clear()
+
+                                except (UnicodeDecodeError, UnicodeEncodeError) as e:
+                                    # 跳过有编码问题的文件夹
+                                    print(f"  ⚠️ 跳过编码问题文件夹: {entry.name} ({e})")
+                                    continue
+
+                        except (OSError, IOError) as e:
+                            # 跳过无法访问的条目
+                            continue
 
                     # 添加剩余的文件夹
                     if batch_folders:
@@ -2439,7 +2453,10 @@ class FileMatcher:
                             break
                         _scan_directory_memory_optimized(subdir, current_depth + 1)
 
-            except (PermissionError, OSError):
+            except (PermissionError, OSError, UnicodeDecodeError, UnicodeEncodeError) as e:
+                # 增强异常处理，包括编码错误
+                if isinstance(e, (UnicodeDecodeError, UnicodeEncodeError)):
+                    print(f"  ⚠️ 目录编码问题: {path} ({e})")
                 pass
 
         _scan_directory_memory_optimized(self.base_directory)
@@ -2492,13 +2509,21 @@ class FileMatcher:
             matches = []
 
             def process_folder_fast(folder_path: Path) -> Optional[Tuple[str, float]]:
-                """快速文件夹处理"""
+                """快速文件夹处理 - 增强编码安全"""
                 try:
                     folder_name = folder_path.name
+                    # 验证文件夹名称可以正确编码/解码
+                    folder_name.encode('utf-8').decode('utf-8')
+                    str(folder_path).encode('utf-8').decode('utf-8')
+
                     similarity_score = self.similarity(search_name, folder_name)
 
                     if similarity_score >= self.min_score:
                         return (str(folder_path), similarity_score)
+                    return None
+                except (UnicodeDecodeError, UnicodeEncodeError) as e:
+                    # 跳过有编码问题的文件夹
+                    print(f"  ⚠️ 跳过编码问题文件夹: {folder_path} ({e})")
                     return None
                 except Exception:
                     return None
@@ -3825,8 +3850,39 @@ class TorrentMakerApp:
                     else:
                         print("请输入 y(是) 或 n(否)")
 
+            except (UnicodeDecodeError, UnicodeEncodeError) as e:
+                print(f"❌ 搜索过程中发生编码错误: {e}")
+                print("💡 建议: 检查资源文件夹中是否有包含特殊字符的文件名")
+                print("💡 解决方案: 可以尝试重命名有问题的文件夹，或清理缓存")
+
+                # 提供清理缓存选项
+                clear_cache = input("是否清理缓存并重试？(y/n): ").strip().lower()
+                if clear_cache in ['y', 'yes', '是']:
+                    try:
+                        if hasattr(self.matcher, 'cache') and self.matcher.cache:
+                            self.matcher.cache._cache.clear()
+                            print("✅ 缓存已清理")
+                        if hasattr(self.matcher, 'folder_info_cache') and self.matcher.folder_info_cache:
+                            self.matcher.folder_info_cache._cache.clear()
+                            print("✅ 文件夹信息缓存已清理")
+                        continue  # 重新尝试搜索
+                    except Exception as cache_e:
+                        print(f"⚠️ 清理缓存时出错: {cache_e}")
+
+                # 发生错误时也询问是否继续
+                while True:
+                    continue_choice = input("\n是否继续搜索其他内容？(y/n): ").strip().lower()
+                    if continue_choice in ['n', 'no', '否']:
+                        return  # 返回主菜单
+                    elif continue_choice in ['y', 'yes', '是', '']:
+                        break  # 继续搜索循环
+                    else:
+                        print("请输入 y(是) 或 n(否)")
+
             except Exception as e:
-                print(f"❌ 搜索过程中发生错误: {e}")
+                print(f"❌ 搜索过程中发生未知错误: {e}")
+                print(f"❌ 错误类型: {type(e).__name__}")
+
                 # 发生错误时也询问是否继续
                 while True:
                     continue_choice = input("\n是否继续搜索其他内容？(y/n): ").strip().lower()
@@ -4100,11 +4156,12 @@ class TorrentMakerApp:
             print("5. 🔄 重新加载配置")
             print("6. 📤 导出配置")
             print("7. 📥 导入配置")
-            print("8. 🔄 重置为默认配置")
+            print("8. 🧹 清理缓存")
+            print("9. 🔄 重置为默认配置")
             print("0. 🔙 返回主菜单")
             print("=" * 50)
 
-            choice = input("请选择操作 (0-8): ").strip()
+            choice = input("请选择操作 (0-9): ").strip()
 
             try:
                 if choice == '0':
@@ -4124,9 +4181,11 @@ class TorrentMakerApp:
                 elif choice == '7':
                     self._import_config()
                 elif choice == '8':
+                    self._clear_cache()
+                elif choice == '9':
                     self._reset_config()
                 else:
-                    print("❌ 无效选择，请输入 0-8 之间的数字")
+                    print("❌ 无效选择，请输入 0-9 之间的数字")
 
             except Exception as e:
                 print(f"❌ 操作过程中发生错误: {e}")
@@ -4414,6 +4473,48 @@ class TorrentMakerApp:
 
         except Exception as e:
             print(f"❌ 导入配置失败: {e}")
+
+    def _clear_cache(self):
+        """清理缓存"""
+        print("\n🧹 清理缓存")
+        print("=" * 40)
+
+        try:
+            cleared_items = 0
+
+            # 清理搜索缓存
+            if hasattr(self.matcher, 'cache') and self.matcher.cache:
+                cache_stats = self.matcher.cache.get_stats()
+                if cache_stats:
+                    cleared_items += cache_stats.get('total_items', 0)
+                self.matcher.cache._cache.clear()
+                print("✅ 搜索缓存已清理")
+
+            # 清理文件夹信息缓存
+            if hasattr(self.matcher, 'folder_info_cache') and self.matcher.folder_info_cache:
+                cache_stats = self.matcher.folder_info_cache.get_stats()
+                if cache_stats:
+                    cleared_items += cache_stats.get('total_items', 0)
+                self.matcher.folder_info_cache._cache.clear()
+                print("✅ 文件夹信息缓存已清理")
+
+            # 清理大小缓存
+            if hasattr(self.matcher, 'size_cache') and self.matcher.size_cache:
+                if hasattr(self.matcher.size_cache, '_cache'):
+                    self.matcher.size_cache._cache.clear()
+                    print("✅ 大小缓存已清理")
+
+            # 清理智能索引缓存
+            if hasattr(self.matcher, 'smart_index') and self.matcher.smart_index:
+                if hasattr(self.matcher.smart_index, '_word_index'):
+                    self.matcher.smart_index._word_index.clear()
+                    print("✅ 智能索引缓存已清理")
+
+            print(f"✅ 缓存清理完成，共清理 {cleared_items} 个缓存项")
+            print("💡 建议: 清理缓存后首次搜索可能会稍慢，但可以解决编码问题")
+
+        except Exception as e:
+            print(f"❌ 清理缓存失败: {e}")
 
     def _reset_config(self):
         """重置配置为默认值"""
