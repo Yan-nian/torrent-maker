@@ -14,7 +14,7 @@ Torrent Maker - 单文件版本 v1.5.1
 - 🧹 改进内存管理和清理机制
 - 📊 优化配置管理功能显示
 
-🚀 v1.5.0 性能优化更新:
+🚀 v1.5.1 性能优化更新:
 - ⚡ 种子创建速度提升 30-50%
 - 🧠 智能 Piece Size 计算，减少计算时间 80%
 - � 目录大小缓存优化，支持 LRU 淘汰策略
@@ -685,7 +685,7 @@ class ConfigManager:
 
 # ================== 智能索引缓存 ==================
 class SmartIndexCache:
-    """智能索引缓存 - v1.5.0 搜索优化"""
+    """智能索引缓存 - v1.5.1 搜索优化"""
 
     def __init__(self, cache_duration: int = 3600):
         self.cache_duration = cache_duration
@@ -793,7 +793,7 @@ class MemoryAnalyzer:
 
 # ================== 增强内存管理器 ==================
 class MemoryManager:
-    """内存管理器 - v1.5.0 深度内存优化"""
+    """内存管理器 - v1.5.1 深度内存优化"""
 
     def __init__(self, max_memory_mb: int = 512):
         self.max_memory_mb = max_memory_mb
@@ -1025,7 +1025,7 @@ class MemoryManager:
 
 # ================== 真正的异步 I/O 处理器 ==================
 class AsyncIOProcessor:
-    """真正的异步 I/O 处理器 - v1.5.0 深度异步优化"""
+    """真正的异步 I/O 处理器 - v1.5.1 深度异步优化"""
 
     def __init__(self, max_concurrent: int = 10):
         self.max_concurrent = max_concurrent
@@ -1730,7 +1730,7 @@ class FastSimilarityCalculator:
 
 # ================== 文件匹配器 ==================
 class FileMatcher:
-    """文件匹配器 - v1.5.0 高性能搜索优化版本"""
+    """文件匹配器 - v1.5.1 高性能搜索优化版本"""
 
     VIDEO_EXTENSIONS = {
         '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv',
@@ -1755,7 +1755,7 @@ class FileMatcher:
         self.folder_info_cache = SearchCache(cache_duration) if enable_cache else None
         self.performance_monitor = PerformanceMonitor()
 
-        # v1.5.0 新增：智能索引缓存、内存管理和异步 I/O
+        # v1.5.1 新增：智能索引缓存、内存管理和异步 I/O
         self.smart_index = SmartIndexCache(cache_duration)
         self.similarity_calc = FastSimilarityCalculator()
         self.memory_manager = MemoryManager(max_memory_mb=256)  # 限制 256MB
@@ -1782,7 +1782,7 @@ class FileMatcher:
         return hashlib.md5(key_data.encode()).hexdigest()
 
     def _normalize_string(self, text: str) -> str:
-        """高性能字符串标准化 - v1.5.0 优化版本"""
+        """高性能字符串标准化 - v1.5.1 优化版本"""
         if not text:
             return ""
 
@@ -1827,7 +1827,7 @@ class FileMatcher:
         return result
 
     def similarity(self, a: str, b: str) -> float:
-        """高性能相似度计算 - v1.5.0 优化版本"""
+        """高性能相似度计算 - v1.5.1 优化版本"""
         # 缓存相似度计算结果
         cache_key = f"sim:{a}:{b}"
         if self.cache:
@@ -2032,7 +2032,7 @@ class FileMatcher:
         return folders
 
     def fuzzy_search(self, search_name: str, max_results: int = 10) -> List[Tuple[str, float]]:
-        """智能模糊搜索 - v1.5.0 高性能优化版本"""
+        """智能模糊搜索 - v1.5.1 高性能优化版本"""
         self.performance_monitor.start_timer('fuzzy_search')
 
         try:
@@ -2211,7 +2211,7 @@ class FileMatcher:
         return result
 
     def get_performance_stats(self) -> Dict[str, Any]:
-        """获取搜索性能统计 - v1.5.0 增强版"""
+        """获取搜索性能统计 - v1.5.1 增强版"""
         stats = self.performance_monitor.get_all_stats()
         memory_info = self.memory_manager.get_memory_usage()
 
@@ -2408,7 +2408,7 @@ class FileMatcher:
 
 # ================== 种子创建器 ==================
 class TorrentCreator:
-    """种子创建器 - v1.5.0高性能优化版本"""
+    """种子创建器 - v1.5.1高性能优化版本"""
 
     DEFAULT_PIECE_SIZE = "auto"
     DEFAULT_COMMENT = "Created by Torrent Maker v1.5.1"
@@ -2443,7 +2443,7 @@ class TorrentCreator:
         self.size_cache = DirectorySizeCache()
         self._piece_size_cache = {}  # 缓存计算结果
 
-        # v1.5.0 第二阶段优化：内存管理和异步 I/O
+        # v1.5.1 第二阶段优化：内存管理和异步 I/O
         self.memory_manager = MemoryManager(max_memory_mb=512)
         self.stream_processor = StreamFileProcessor(memory_manager=self.memory_manager)
         self.async_processor = AsyncIOProcessor(max_concurrent=4)
@@ -2763,7 +2763,7 @@ class TorrentCreator:
         return results
 
     def get_performance_stats(self) -> Dict[str, Any]:
-        """获取性能统计信息 - v1.5.0 第二阶段增强版"""
+        """获取性能统计信息 - v1.5.1 第二阶段增强版"""
         stats = self.performance_monitor.get_all_stats()
         cache_stats = self.size_cache.get_cache_stats()
         memory_info = self.memory_manager.get_memory_usage()
@@ -2822,7 +2822,7 @@ class TorrentCreator:
             return "需要优化"
 
     def _calculate_performance_grade_v2(self, creation_stats: Dict, cache_stats: Dict, memory_info: Dict) -> str:
-        """计算性能等级 - v1.5.0 第二阶段版本"""
+        """计算性能等级 - v1.5.1 第二阶段版本"""
         avg_time = creation_stats.get('average', 0)
         hit_rate = cache_stats.get('hit_rate', 0)
         memory_mb = memory_info.get('rss_mb', 0)
@@ -2846,7 +2846,7 @@ class TorrentCreator:
             return "需要优化 (F)"
 
     def _generate_optimization_suggestions_v2(self, stats: Dict, cache_stats: Dict, memory_info: Dict) -> List[str]:
-        """生成优化建议 - v1.5.0 第二阶段版本"""
+        """生成优化建议 - v1.5.1 第二阶段版本"""
         suggestions = []
 
         # 检查创建时间
@@ -2894,7 +2894,7 @@ class TorrentCreator:
         return self._generate_optimization_suggestions_v2(stats, cache_stats, {'rss_mb': 0})
 
     def clear_caches(self) -> Dict[str, int]:
-        """清理所有缓存 - v1.5.0 第二阶段增强版"""
+        """清理所有缓存 - v1.5.1 第二阶段增强版"""
         cleared_counts = {}
 
         # 清理目录大小缓存
@@ -2910,7 +2910,7 @@ class TorrentCreator:
         expired_count = self.size_cache.cleanup_expired()
         cleared_counts['expired_entries'] = expired_count
 
-        # v1.5.0 新增：深度内存管理清理
+        # v1.5.1 新增：深度内存管理清理
         memory_cleaned = self.memory_manager.cleanup_memory()
         cleared_counts.update(memory_cleaned)
 
@@ -2925,7 +2925,7 @@ class TorrentCreator:
         return cleared_counts
 
     def get_system_info(self) -> Dict[str, Any]:
-        """获取系统信息 - v1.5.0 新增"""
+        """获取系统信息 - v1.5.1 新增"""
         memory_info = self.memory_manager.get_memory_usage()
 
         return {

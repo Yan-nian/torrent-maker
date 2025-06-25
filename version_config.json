@@ -63,6 +63,82 @@
                 {
                     "pattern": "感谢使用 Torrent Maker v(\\d+\\.\\d+\\.\\d+)！",
                     "replacement": "感谢使用 Torrent Maker v{version}！"
+                },
+                {
+                    "pattern": "配置管理器 - v(\\d+\\.\\d+\\.\\d+)修复优化版本",
+                    "replacement": "配置管理器 - v{version}修复优化版本"
+                },
+                {
+                    "pattern": "智能索引缓存 - v(\\d+\\.\\d+\\.\\d+) 搜索优化",
+                    "replacement": "智能索引缓存 - v{version} 搜索优化"
+                },
+                {
+                    "pattern": "内存管理器 - v(\\d+\\.\\d+\\.\\d+) 深度内存优化",
+                    "replacement": "内存管理器 - v{version} 深度内存优化"
+                },
+                {
+                    "pattern": "真正的异步 I/O 处理器 - v(\\d+\\.\\d+\\.\\d+) 深度异步优化",
+                    "replacement": "真正的异步 I/O 处理器 - v{version} 深度异步优化"
+                },
+                {
+                    "pattern": "文件匹配器 - v(\\d+\\.\\d+\\.\\d+) 高性能搜索优化版本",
+                    "replacement": "文件匹配器 - v{version} 高性能搜索优化版本"
+                },
+                {
+                    "pattern": "v(\\d+\\.\\d+\\.\\d+) 新增：智能索引缓存、内存管理和异步 I/O",
+                    "replacement": "v{version} 新增：智能索引缓存、内存管理和异步 I/O"
+                },
+                {
+                    "pattern": "高性能字符串标准化 - v(\\d+\\.\\d+\\.\\d+) 优化版本",
+                    "replacement": "高性能字符串标准化 - v{version} 优化版本"
+                },
+                {
+                    "pattern": "高性能相似度计算 - v(\\d+\\.\\d+\\.\\d+) 优化版本",
+                    "replacement": "高性能相似度计算 - v{version} 优化版本"
+                },
+                {
+                    "pattern": "智能模糊搜索 - v(\\d+\\.\\d+\\.\\d+) 高性能优化版本",
+                    "replacement": "智能模糊搜索 - v{version} 高性能优化版本"
+                },
+                {
+                    "pattern": "获取搜索性能统计 - v(\\d+\\.\\d+\\.\\d+) 增强版",
+                    "replacement": "获取搜索性能统计 - v{version} 增强版"
+                },
+                {
+                    "pattern": "种子创建器 - v(\\d+\\.\\d+\\.\\d+)高性能优化版本",
+                    "replacement": "种子创建器 - v{version}高性能优化版本"
+                },
+                {
+                    "pattern": "v(\\d+\\.\\d+\\.\\d+) 第二阶段优化：内存管理和异步 I/O",
+                    "replacement": "v{version} 第二阶段优化：内存管理和异步 I/O"
+                },
+                {
+                    "pattern": "comment = f\"\\{self\\.comment\\} v(\\d+\\.\\d+\\.\\d+)\"",
+                    "replacement": "comment = f\"{self.comment} v{version}\""
+                },
+                {
+                    "pattern": "获取性能统计信息 - v(\\d+\\.\\d+\\.\\d+) 第二阶段增强版",
+                    "replacement": "获取性能统计信息 - v{version} 第二阶段增强版"
+                },
+                {
+                    "pattern": "计算性能等级 - v(\\d+\\.\\d+\\.\\d+) 第二阶段版本",
+                    "replacement": "计算性能等级 - v{version} 第二阶段版本"
+                },
+                {
+                    "pattern": "生成优化建议 - v(\\d+\\.\\d+\\.\\d+) 第二阶段版本",
+                    "replacement": "生成优化建议 - v{version} 第二阶段版本"
+                },
+                {
+                    "pattern": "清理所有缓存 - v(\\d+\\.\\d+\\.\\d+) 第二阶段增强版",
+                    "replacement": "清理所有缓存 - v{version} 第二阶段增强版"
+                },
+                {
+                    "pattern": "v(\\d+\\.\\d+\\.\\d+) 新增：深度内存管理清理",
+                    "replacement": "v{version} 新增：深度内存管理清理"
+                },
+                {
+                    "pattern": "获取系统信息 - v(\\d+\\.\\d+\\.\\d+) 新增",
+                    "replacement": "获取系统信息 - v{version} 新增"
                 }
             ]
         },
