@@ -2674,71 +2674,87 @@ class TorrentCreator:
 
         # 获取系统信息
         cpu_count = os.cpu_count() or 4
-        try:
-            # 获取系统负载（仅在支持的系统上）
-            load_avg = os.getloadavg()[0] if hasattr(os, 'getloadavg') else 0
-            # 简单的内存检测（通过可用内存估算）
+        load_avg = 0.0
+        memory_usage_percent = 50.0  # 默认值
+
+        if hasattr(os, 'getloadavg'):
             try:
+                load_avg = os.getloadavg()[0]
+            except OSError:
+                pass  # 在某些容器环境下可能失败
+
+        try:
+            import psutil
+            memory_usage_percent = psutil.virtual_memory().percent
+        except (ImportError, AttributeError):
+            try:
+                # 当 psutil 不可用时，回退到读取 /proc/meminfo (仅限Linux)
                 with open('/proc/meminfo', 'r') as f:
                     meminfo = f.read()
-                    total_mem = int([line for line in meminfo.split('\n') if 'MemTotal' in line][0].split()[1])
-                    available_mem = int([line for line in meminfo.split('\n') if 'MemAvailable' in line][0].split()[1])
-                    memory_usage_percent = (1 - available_mem / total_mem) * 100
-            except:
-                memory_usage_percent = 50  # 默认值
-        except:
-            load_avg = 0
-            memory_usage_percent = 50  # 默认值
+                total_mem_match = re.search(r'MemTotal:\s+(\d+)', meminfo)
+                available_mem_match = re.search(r'MemAvailable:\s+(\d+)', meminfo)
+                if total_mem_match and available_mem_match:
+                    total_mem = int(total_mem_match.group(1))
+                    available_mem = int(available_mem_match.group(1))
+                    if total_mem > 0:
+                        memory_usage_percent = (1 - available_mem / total_mem) * 100
+            except (IOError, AttributeError, ValueError):
+                pass # 无法获取内存信息，使用默认值
 
-        # 基础线程数计算
+        # 1. 基础线程数
         base_threads = cpu_count
 
-        # 根据文件大小调整
-        if file_size_bytes > 0:
-            file_size_gb = file_size_bytes / (1024 * 1024 * 1024)
-            if file_size_gb < 1:  # 小文件
-                base_threads = min(base_threads, 4)
-            elif file_size_gb < 10:  # 中等文件
-                base_threads = min(base_threads, 6)
-            # 大文件使用更多线程
+        # 2. 根据文件大小调整策略
+        file_size_gb = file_size_bytes / (1024 * 1024 * 1024) if file_size_bytes > 0 else 0
+        if file_size_gb > 0:
+            if file_size_gb < 2:  # 小文件 (<2GB)
+                thread_limit = max(4, cpu_count // 2)
+                base_threads = min(base_threads, thread_limit, 8)
+            elif file_size_gb < 50: # 中等文件 (2GB-50GB)
+                thread_limit = max(6, int(cpu_count * 0.75))
+                base_threads = min(base_threads, thread_limit)
 
-        # 根据系统负载调整
-        if load_avg > cpu_count * 0.8:  # 系统负载较高
-            base_threads = max(2, int(base_threads * 0.7))
+        # 3. 根据系统负载动态调整
+        load_per_core = load_avg / cpu_count if cpu_count > 0 else 0
+        if load_per_core > 0.7:  # 当每核心的平均负载 > 0.7 时，认为系统繁忙
+            reduction_factor = 1.0 - min(0.5, (load_per_core - 0.7))
+            base_threads = max(2, int(base_threads * reduction_factor))
 
-        # 根据内存使用情况调整
+        # 4. 根据内存使用情况调整
         if memory_usage_percent > 85:  # 内存使用率过高
             base_threads = max(2, int(base_threads * 0.8))
 
-        # mktorrent 的最优线程数通常不超过8
-        optimal_threads = min(base_threads, 8)
-
-        # 确保至少使用2个线程
-        optimal_threads = max(optimal_threads, 2)
+        # 5. mktorrent 的最优线程数上限, 对于高性能机器放宽到16
+        optimal_threads = min(base_threads, 16)
+        optimal_threads = max(optimal_threads, 2) # 确保至少使用2个线程
 
         return {
             'cpu_count': cpu_count,
-            'optimal_threads': optimal_threads,
+            'optimal_threads': int(optimal_threads),
             'load_avg': load_avg,
             'memory_usage_percent': memory_usage_percent,
-            'file_size_gb': file_size_bytes / (1024 * 1024 * 1024) if file_size_bytes > 0 else 0,
-            'recommendation': self._get_thread_recommendation(optimal_threads, cpu_count, file_size_bytes)
+            'file_size_gb': file_size_gb,
+            'recommendation': self._get_thread_recommendation(int(optimal_threads), cpu_count, file_size_bytes, load_per_core)
         }
 
-    def _get_thread_recommendation(self, optimal_threads: int, cpu_count: int, file_size_bytes: int) -> str:
+    def _get_thread_recommendation(self, optimal_threads: int, cpu_count: int, file_size_bytes: int, load_per_core: float) -> str:
         """获取线程配置建议"""
         file_size_gb = file_size_bytes / (1024 * 1024 * 1024) if file_size_bytes > 0 else 0
 
-        if optimal_threads == cpu_count:
-            return "使用全部CPU核心，性能最佳"
-        elif optimal_threads < cpu_count * 0.5:
-            return "系统负载较高，使用较少线程避免过载"
-        elif file_size_gb < 1:
-            return "小文件优化，使用适中线程数"
-        elif file_size_gb > 10:
-            return "大文件处理，使用更多线程加速"
+        if load_per_core > 0.7:
+            return f"系统负载较高 (每核负载 {load_per_core:.2f})，已自动减少线程"
+        elif optimal_threads >= cpu_count * 0.9:
+            return "系统资源充足，使用最大化线程以提升性能"
+        elif file_size_gb > 50:
+            return "超大文件处理，已启用更多线程加速"
+        elif file_size_gb > 2:
+            return "文件较大，已智能分配较多线程"
+        elif file_size_gb > 0:
+            return "小文件制种，已优化线程数以平衡开销和性能"
+        elif optimal_threads < cpu_count * 0.5 and optimal_threads < 8:
+            return "根据系统综合状态，使用保守线程策略"
         else:
-            return "根据系统状态智能调整"
+            return "根据系统状态和文件大小智能调整"
 
     def _show_performance_suggestions(self, file_size_bytes: int, total_duration: float, mktorrent_duration: float):
         """显示性能优化建议"""
@@ -2799,7 +2815,7 @@ class TorrentCreator:
         thread_count = thread_info['optimal_threads']
 
         command.extend(['-t', str(thread_count)])
-
+        
         # 显示详细的线程配置信息
         print(f"  🖥️  系统CPU核心数: {thread_info['cpu_count']}")
         print(f"  🧵 最优线程数: {thread_count}")
@@ -2809,7 +2825,7 @@ class TorrentCreator:
         if thread_info['file_size_gb'] > 0:
             print(f"  📁 文件大小: {thread_info['file_size_gb']:.2f} GB")
         print(f"  💡 配置建议: {thread_info['recommendation']}")
-
+        
         # 私有种子标记
         if self.private:
             command.append('-p')
@@ -2907,7 +2923,7 @@ class TorrentCreator:
     def _create_torrent_mktorrent(self, source_path: Path, output_file: Path,
                                  piece_size_log2: int, progress_callback,
                                  file_size_bytes: int = 0, creation_start_time: float = None) -> str:
-        """使用mktorrent创建种子"""
+        """使用 mktorrent 创建种子"""
         # 记录mktorrent执行开始时间
         mktorrent_start_time = time.time()
 
