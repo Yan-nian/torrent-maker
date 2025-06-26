@@ -5,6 +5,13 @@
 Torrent Maker - 单文件版本 v1.9.0
 基于 mktorrent 的高性能半自动化种子制作工具
 
+🎯 v1.9.1 用户体验优化版本:
+- 🔍 智能路径补全功能（Tab键补全、历史记录、智能建议）
+- 📊 实时制种进度监控（进度条、可视化、性能统计）
+- 📝 搜索历史管理（历史记录、热门搜索、智能建议）
+- ⚡ 制种过程控制（进度取消、暂停恢复、多任务管理）
+- 🎨 用户界面全面优化（交互体验、视觉提示、操作便捷性）
+
 🎯 v1.9.0 性能监控增强版本:
 - ⏰ 新增制种时间显示功能（开始时间、完成时间、总耗时）
 - 🧵 智能多线程检测与优化（自动检测最优线程数）
@@ -65,13 +72,24 @@ from typing import List, Dict, Any, Tuple, Optional, Union, Set
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 
+# 导入新的功能模块
+try:
+    from path_completer import PathCompleter
+    from progress_monitor import TorrentProgressMonitor
+    from search_history import SearchHistory, SmartSearchSuggester
+    ENHANCED_FEATURES_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ 增强功能模块导入失败: {e}")
+    print("💡 将使用基础功能运行")
+    ENHANCED_FEATURES_AVAILABLE = False
+
 # 配置日志
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "1.9.0"
-VERSION_NAME = "性能监控增强版"
+VERSION = "1.9.1"
+VERSION_NAME = "用户体验优化版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
@@ -3437,7 +3455,19 @@ class TorrentMakerApp:
         self.config = ConfigManager()
         self.matcher = None
         self.creator = None
-        self.search_history = SearchHistory()
+        
+        # 初始化增强功能模块
+        if ENHANCED_FEATURES_AVAILABLE:
+            self.search_history = SearchHistory()
+            self.search_suggester = SmartSearchSuggester(self.search_history)
+            self.path_completer = PathCompleter()
+            self.progress_monitor = None  # 将在需要时初始化
+        else:
+            self.search_history = None
+            self.search_suggester = None
+            self.path_completer = None
+            self.progress_monitor = None
+            
         self._init_components()
 
     def _init_components(self):
@@ -3501,14 +3531,33 @@ class TorrentMakerApp:
         print("  3. 📁 批量制种")
         print("  4. ⚙️  配置管理")
         print("  5. 📊 查看性能统计")
-        print("  6. ❓ 帮助")
-        print("  0. 🚪 退出")
+        if ENHANCED_FEATURES_AVAILABLE:
+            print("  6. 📝 搜索历史管理")
+            print("  7. ❓ 帮助")
+            print("  0. 🚪 退出")
+        else:
+            print("  6. ❓ 帮助")
+            print("  0. 🚪 退出")
         print()
 
     def search_and_create(self):
         """搜索并制作种子"""
         while True:
-            search_name = input("🔍 请输入要搜索的影视剧名称 (回车返回主菜单): ").strip()
+            # 显示搜索建议（如果有增强功能）
+            if self.search_history:
+                recent_searches = self.search_history.get_recent_queries(5)
+                if recent_searches:
+                    print("\n📝 最近搜索:")
+                    for i, search in enumerate(recent_searches, 1):
+                        print(f"  {i}. {search.query} (结果: {search.result_count})")
+                    print()
+            
+            # 获取用户输入（支持路径补全）
+            if self.path_completer:
+                search_name = self.path_completer.get_input("🔍 请输入要搜索的影视剧名称 (回车返回主菜单): ")
+            else:
+                search_name = input("🔍 请输入要搜索的影视剧名称 (回车返回主菜单): ").strip()
+                
             if not search_name:
                 break
 
@@ -3518,9 +3567,22 @@ class TorrentMakerApp:
             try:
                 results = self.matcher.match_folders(search_name)
                 search_time = time.time() - start_time
+                
+                # 记录搜索历史
+                if self.search_history:
+                    self.search_history.add_search(search_name, len(results), search_time)
 
                 if not results:
                     print(f"❌ 未找到匹配的文件夹 (搜索耗时: {search_time:.3f}s)")
+                    
+                    # 提供智能搜索建议
+                    if self.search_suggester:
+                        suggestions = self.search_suggester.get_search_suggestions(search_name)
+                        if suggestions:
+                            print("\n💡 搜索建议:")
+                            for suggestion in suggestions:
+                                print(f"  • {suggestion}")
+                    
                     # 询问是否继续搜索
                     while True:
                         continue_choice = input("是否继续搜索其他内容？(y/n): ").strip().lower()
@@ -3655,17 +3717,31 @@ class TorrentMakerApp:
             print(f"⏰ 开始时间: {datetime.now().strftime('%H:%M:%S')}")
             print("="*60)
 
+            # 初始化进度监控
+            if ENHANCED_FEATURES_AVAILABLE and self.progress_monitor is None:
+                self.progress_monitor = TorrentProgressMonitor()
+            
             def progress_callback(message):
                 print(f"  📈 {message}")
+                if self.progress_monitor:
+                    self.progress_monitor.update_progress(message)
 
             # 记录开始时间用于总体统计
             start_time = time.time()
+            
+            # 启动进度监控
+            if self.progress_monitor:
+                self.progress_monitor.start_monitoring(folder_name, folder_path)
 
             torrent_path = self.creator.create_torrent(
                 folder_path,
                 folder_name,
                 progress_callback
             )
+            
+            # 停止进度监控
+            if self.progress_monitor:
+                self.progress_monitor.stop_monitoring()
 
             if torrent_path and self.creator.validate_torrent(torrent_path):
                 # 计算总耗时
@@ -3699,7 +3775,12 @@ class TorrentMakerApp:
         print("  - 多个路径: /path1;/path2;/path3")
         print("="*60)
 
-        paths_input = input("请输入文件夹路径: ").strip()
+        # 使用路径补全功能获取输入
+        if self.path_completer:
+            paths_input = self.path_completer.get_input("请输入文件夹路径: ")
+        else:
+            paths_input = input("请输入文件夹路径: ").strip()
+            
         if not paths_input:
             return
 
@@ -4352,7 +4433,8 @@ class TorrentMakerApp:
         while True:
             try:
                 self.display_menu()
-                choice = input("请选择操作 (0-6): ").strip()
+                max_choice = 7 if ENHANCED_FEATURES_AVAILABLE else 6
+                choice = input(f"请选择操作 (0-{max_choice}): ").strip()
 
                 if choice == '0':
                     print(f"👋 感谢使用 {FULL_VERSION_INFO}！")
@@ -4368,6 +4450,11 @@ class TorrentMakerApp:
                 elif choice == '5':
                     self.show_performance_stats()
                 elif choice == '6':
+                    if ENHANCED_FEATURES_AVAILABLE:
+                        self.search_history_management()
+                    else:
+                        self.show_help()
+                elif choice == '7' and ENHANCED_FEATURES_AVAILABLE:
                     self.show_help()
                 else:
                     print("❌ 无效选择，请重新输入")
@@ -4379,6 +4466,108 @@ class TorrentMakerApp:
                 break
             except Exception as e:
                 print(f"❌ 程序运行时发生错误: {e}")
+    
+    def search_history_management(self):
+        """搜索历史管理"""
+        if not self.search_history:
+            print("❌ 搜索历史功能不可用")
+            return
+            
+        while True:
+            print("\n📝 搜索历史管理")
+            print("=" * 60)
+            print("  1. 📋 查看搜索历史")
+            print("  2. 🔥 查看热门搜索")
+            print("  3. 📊 查看搜索统计")
+            print("  4. 🗑️  清理搜索历史")
+            print("  5. 📤 导出搜索历史")
+            print("  0. 🔙 返回主菜单")
+            print()
+            
+            choice = input("请选择操作 (0-5): ").strip()
+            
+            if choice == '0':
+                break
+            elif choice == '1':
+                self._show_search_history()
+            elif choice == '2':
+                self._show_popular_searches()
+            elif choice == '3':
+                self._show_search_statistics()
+            elif choice == '4':
+                self._clear_search_history()
+            elif choice == '5':
+                self._export_search_history()
+            else:
+                print("❌ 无效选择，请重新输入")
+    
+    def _show_search_history(self):
+        """显示搜索历史"""
+        recent_searches = self.search_history.get_recent_queries(20)
+        if not recent_searches:
+            print("\n📝 暂无搜索历史")
+            return
+            
+        print("\n📋 最近搜索历史:")
+        print("-" * 80)
+        print(f"{'序号':<4} {'搜索内容':<30} {'结果数':<8} {'搜索时间':<12} {'耗时':<8}")
+        print("-" * 80)
+        
+        for i, search in enumerate(recent_searches, 1):
+            timestamp = search.timestamp.strftime('%m-%d %H:%M')
+            duration = f"{search.duration:.3f}s" if search.duration else "N/A"
+            print(f"{i:<4} {search.query[:28]:<30} {search.result_count:<8} {timestamp:<12} {duration:<8}")
+    
+    def _show_popular_searches(self):
+        """显示热门搜索"""
+        popular_searches = self.search_history.get_popular_queries(10)
+        if not popular_searches:
+            print("\n🔥 暂无热门搜索")
+            return
+            
+        print("\n🔥 热门搜索 (按搜索次数排序):")
+        print("-" * 50)
+        print(f"{'排名':<4} {'搜索内容':<30} {'搜索次数':<8}")
+        print("-" * 50)
+        
+        for i, (query, count) in enumerate(popular_searches, 1):
+            print(f"{i:<4} {query[:28]:<30} {count:<8}")
+    
+    def _show_search_statistics(self):
+        """显示搜索统计"""
+        stats = self.search_history.get_statistics()
+        if not stats:
+            print("\n📊 暂无搜索统计")
+            return
+            
+        print("\n📊 搜索统计信息:")
+        print("-" * 40)
+        print(f"总搜索次数: {stats['total_searches']}")
+        print(f"成功搜索次数: {stats['successful_searches']}")
+        print(f"成功率: {stats['success_rate']:.1f}%")
+        print(f"平均搜索耗时: {stats['average_duration']:.3f}s")
+        print(f"平均结果数: {stats['average_results']:.1f}")
+        print(f"最早搜索: {stats['earliest_search'].strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"最近搜索: {stats['latest_search'].strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    def _clear_search_history(self):
+        """清理搜索历史"""
+        confirm = input("\n⚠️ 确认清理所有搜索历史？(y/N): ").strip().lower()
+        if confirm in ['y', 'yes', '是']:
+            self.search_history.clear_history()
+            print("✅ 搜索历史已清理")
+        else:
+            print("❌ 操作已取消")
+    
+    def _export_search_history(self):
+        """导出搜索历史"""
+        try:
+            filename = f"search_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            filepath = os.path.join(os.getcwd(), filename)
+            self.search_history.export_history(filepath)
+            print(f"✅ 搜索历史已导出到: {filepath}")
+        except Exception as e:
+            print(f"❌ 导出失败: {e}")
 
     def show_performance_stats(self):
         """显示性能统计信息"""
