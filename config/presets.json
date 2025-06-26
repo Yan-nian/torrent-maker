@@ -1,0 +1,90 @@
+{
+  "presets": {
+    "fast": {
+      "name": "快速模式",
+      "description": "适用于小文件(<1GB)，优先制种速度",
+      "settings": {
+        "piece_size": "256k",
+        "max_concurrent_operations": "auto_x2",
+        "cache_enabled": false,
+        "cache_size_mb": 64,
+        "max_scan_depth": 3,
+        "file_search_tolerance": 0.7,
+        "auto_create_output_dir": true,
+        "log_level": "WARNING"
+      },
+      "recommended_for": [
+        "小文件批量制种",
+        "快速分享需求",
+        "网络带宽有限"
+      ]
+    },
+    "standard": {
+      "name": "标准模式",
+      "description": "平衡质量和速度，适用于大多数场景(1-10GB)",
+      "settings": {
+        "piece_size": "auto",
+        "max_concurrent_operations": "auto",
+        "cache_enabled": true,
+        "cache_size_mb": 256,
+        "max_scan_depth": 5,
+        "file_search_tolerance": 0.8,
+        "auto_create_output_dir": true,
+        "log_level": "INFO"
+      },
+      "recommended_for": [
+        "日常制种需求",
+        "中等大小文件",
+        "平衡性能要求"
+      ]
+    },
+    "quality": {
+      "name": "高质量模式",
+      "description": "适用于大文件(>10GB)，优先制种质量",
+      "settings": {
+        "piece_size": "2m",
+        "max_concurrent_operations": "auto_half",
+        "cache_enabled": true,
+        "cache_size_mb": 512,
+        "max_scan_depth": 10,
+        "file_search_tolerance": 0.9,
+        "auto_create_output_dir": true,
+        "log_level": "DEBUG"
+      },
+      "recommended_for": [
+        "大文件制种",
+        "长期保种需求",
+        "高质量要求"
+      ]
+    },
+    "custom": {
+      "name": "自定义模式",
+      "description": "用户自定义配置，可保存个人偏好",
+      "settings": {},
+      "user_defined": true,
+      "recommended_for": [
+        "特殊需求",
+        "高级用户",
+        "个性化配置"
+      ]
+    }
+  },
+  "preset_metadata": {
+    "version": "1.0.0",
+    "created_date": "2024-01-01",
+    "last_updated": "2024-01-01",
+    "default_preset": "standard",
+    "auto_detect_rules": {
+      "file_size_thresholds": {
+        "small": 1073741824,
+        "medium": 10737418240,
+        "large": 107374182400
+      },
+      "auto_preset_mapping": {
+        "small": "fast",
+        "medium": "standard",
+        "large": "quality"
+      }
+    }
+  }
+}

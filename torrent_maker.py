@@ -2,8 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v1.9.0
+Torrent Maker - 单文件版本 v1.9.2
 基于 mktorrent 的高性能半自动化种子制作工具
+
+🎯 v1.9.2 队列管理与预设优化版本:
+- 🔄 队列管理系统（任务队列、进度监控、批量控制）
+- ⚡ 预设模式管理（内置预设、自定义预设、自动检测）
+- 📋 任务状态跟踪（等待、运行、完成、失败状态管理）
+- 🎛️ 高级配置界面（预设选择、队列控制、统计报告）
+- 🚀 批量制种优化（并发处理、智能调度、性能监控）
 
 🎯 v1.9.1 用户体验优化版本:
 - 🔍 智能路径补全功能（Tab键补全、历史记录、智能建议）
@@ -88,8 +95,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "1.9.1"
-VERSION_NAME = "用户体验优化版"
+VERSION = "1.9.2"
+VERSION_NAME = "队列管理与预设优化版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
@@ -730,6 +737,186 @@ class ConfigManager:
         except Exception as e:
             print(f"设置配置项失败: {e}")
             return False
+
+    # ================== 预设模式管理 ==================
+    
+    def _load_presets(self) -> Dict[str, Any]:
+        """加载预设配置"""
+        presets_path = os.path.join(self.config_dir, "presets.json")
+        try:
+            with open(presets_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"⚠️ 加载预设配置失败: {e}")
+            return {"presets": {}, "preset_metadata": {}}
+    
+    def get_available_presets(self) -> Dict[str, Dict[str, Any]]:
+        """获取可用的预设模式"""
+        presets_data = self._load_presets()
+        return presets_data.get("presets", {})
+    
+    def get_preset_info(self, preset_name: str) -> Dict[str, Any]:
+        """获取指定预设的详细信息"""
+        presets = self.get_available_presets()
+        return presets.get(preset_name, {})
+    
+    def apply_preset(self, preset_name: str) -> bool:
+        """应用预设配置"""
+        try:
+            preset_info = self.get_preset_info(preset_name)
+            if not preset_info:
+                print(f"❌ 预设 '{preset_name}' 不存在")
+                return False
+            
+            preset_settings = preset_info.get("settings", {})
+            if not preset_settings:
+                print(f"❌ 预设 '{preset_name}' 没有有效的设置")
+                return False
+            
+            # 处理特殊的线程数配置
+            if "max_concurrent_operations" in preset_settings:
+                thread_config = preset_settings["max_concurrent_operations"]
+                if isinstance(thread_config, str):
+                    import multiprocessing
+                    cpu_count = multiprocessing.cpu_count()
+                    
+                    if thread_config == "auto":
+                        preset_settings["max_concurrent_operations"] = cpu_count
+                    elif thread_config == "auto_x2":
+                        preset_settings["max_concurrent_operations"] = cpu_count * 2
+                    elif thread_config == "auto_half":
+                        preset_settings["max_concurrent_operations"] = max(1, cpu_count // 2)
+            
+            # 应用预设设置
+            for key, value in preset_settings.items():
+                self.settings[key] = value
+            
+            self.save_settings()
+            print(f"✅ 已应用预设: {preset_info.get('name', preset_name)}")
+            print(f"   {preset_info.get('description', '')}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 应用预设失败: {e}")
+            return False
+    
+    def save_custom_preset(self, preset_name: str, description: str = "") -> bool:
+        """保存当前配置为自定义预设"""
+        try:
+            presets_path = os.path.join(self.config_dir, "presets.json")
+            presets_data = self._load_presets()
+            
+            # 创建自定义预设
+            custom_preset = {
+                "name": preset_name,
+                "description": description or f"用户自定义预设: {preset_name}",
+                "settings": self.settings.copy(),
+                "user_defined": True,
+                "created_time": time.time(),
+                "recommended_for": ["用户自定义配置"]
+            }
+            
+            # 添加到预设列表
+            if "presets" not in presets_data:
+                presets_data["presets"] = {}
+            
+            presets_data["presets"][preset_name] = custom_preset
+            
+            # 保存预设文件
+            with open(presets_path, 'w', encoding='utf-8') as f:
+                json.dump(presets_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"✅ 自定义预设 '{preset_name}' 已保存")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 保存自定义预设失败: {e}")
+            return False
+    
+    def delete_custom_preset(self, preset_name: str) -> bool:
+        """删除自定义预设"""
+        try:
+            presets_path = os.path.join(self.config_dir, "presets.json")
+            presets_data = self._load_presets()
+            
+            presets = presets_data.get("presets", {})
+            if preset_name not in presets:
+                print(f"❌ 预设 '{preset_name}' 不存在")
+                return False
+            
+            preset_info = presets[preset_name]
+            if not preset_info.get("user_defined", False):
+                print(f"❌ 无法删除系统预设 '{preset_name}'")
+                return False
+            
+            del presets[preset_name]
+            
+            # 保存更新后的预设文件
+            with open(presets_path, 'w', encoding='utf-8') as f:
+                json.dump(presets_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"✅ 自定义预设 '{preset_name}' 已删除")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 删除自定义预设失败: {e}")
+            return False
+    
+    def auto_detect_preset(self, file_size_bytes: int = 0) -> str:
+        """根据文件大小自动检测推荐的预设模式"""
+        try:
+            presets_data = self._load_presets()
+            metadata = presets_data.get("preset_metadata", {})
+            auto_detect_rules = metadata.get("auto_detect_rules", {})
+            
+            if not auto_detect_rules:
+                return "standard"  # 默认返回标准模式
+            
+            thresholds = auto_detect_rules.get("file_size_thresholds", {})
+            mapping = auto_detect_rules.get("auto_preset_mapping", {})
+            
+            # 根据文件大小确定类别
+            if file_size_bytes < thresholds.get("small", 1073741824):  # < 1GB
+                return mapping.get("small", "fast")
+            elif file_size_bytes < thresholds.get("medium", 10737418240):  # < 10GB
+                return mapping.get("medium", "standard")
+            else:  # >= 10GB
+                return mapping.get("large", "quality")
+                
+        except Exception as e:
+            print(f"⚠️ 自动检测预设失败: {e}")
+            return "standard"
+    
+    def display_presets_menu(self) -> None:
+        """显示预设模式菜单"""
+        presets = self.get_available_presets()
+        if not presets:
+            print("❌ 没有可用的预设模式")
+            return
+        
+        print("\n" + "="*60)
+        print("🎛️  配置预设模式")
+        print("="*60)
+        
+        for i, (preset_key, preset_info) in enumerate(presets.items(), 1):
+            name = preset_info.get("name", preset_key)
+            description = preset_info.get("description", "")
+            is_custom = preset_info.get("user_defined", False)
+            custom_tag = " [自定义]" if is_custom else ""
+            
+            print(f"{i}. {name}{custom_tag}")
+            print(f"   {description}")
+            
+            # 显示推荐场景
+            recommended = preset_info.get("recommended_for", [])
+            if recommended:
+                print(f"   💡 推荐用于: {', '.join(recommended)}")
+            print()
+        
+        print(f"{len(presets) + 1}. 保存当前配置为自定义预设")
+        print(f"{len(presets) + 2}. 删除自定义预设")
+        print(f"{len(presets) + 3}. 返回上级菜单")
+        print("="*60)
 
 
 # ================== 智能索引缓存 ==================
@@ -3471,6 +3658,7 @@ class TorrentMakerApp:
         self.config = ConfigManager()
         self.matcher = None
         self.creator = None
+        self.queue_manager = None  # 队列管理器
         
         # 初始化增强功能模块
         if ENHANCED_FEATURES_AVAILABLE:
@@ -3511,6 +3699,25 @@ class TorrentMakerApp:
                 output_folder,
                 max_workers=max_workers
             )
+            
+            # 初始化队列管理器
+            try:
+                from queue_manager import TorrentQueueManager
+                self.queue_manager = TorrentQueueManager(
+                    self.creator,
+                    max_concurrent=max_workers,
+                    save_file="torrent_queue.json"
+                )
+                # 设置回调函数
+                self.queue_manager.set_callbacks(
+                    on_task_start=self._on_queue_task_start,
+                    on_task_complete=self._on_queue_task_complete,
+                    on_task_failed=self._on_queue_task_failed,
+                    on_progress_update=self._on_queue_progress_update
+                )
+            except ImportError:
+                print("⚠️ 队列管理功能不可用")
+                self.queue_manager = None
 
         except Exception as e:
             print(f"❌ 初始化失败: {e}")
@@ -3524,6 +3731,13 @@ class TorrentMakerApp:
         print("=" * 62)
         print()
         print(f"🎯 v{VERSION} {VERSION_NAME}更新:")
+        print("  🔄 队列管理系统（任务队列、进度监控、批量控制）")
+        print("  ⚡ 预设模式管理（内置预设、自定义预设、自动检测）")
+        print("  📋 任务状态跟踪（等待、运行、完成、失败状态管理）")
+        print("  🎛️ 高级配置界面（预设选择、队列控制、统计报告）")
+        print("  🚀 批量制种优化（并发处理、智能调度、性能监控）")
+        print()
+        print("🎯 v1.9.1 用户体验优化版更新:")
         print("  ⏰ 新增制种时间显示功能（开始/完成时间、总耗时）")
         print("  🧵 智能多线程检测与优化（自动检测最优线程数）")
         print("  📊 详细性能信息展示（制种速度、效率分析）")
@@ -3547,12 +3761,13 @@ class TorrentMakerApp:
         print("  3. 📁 批量制种")
         print("  4. ⚙️  配置管理")
         print("  5. 📊 查看性能统计")
+        print("  6. 🔄 队列管理")
         if ENHANCED_FEATURES_AVAILABLE:
-            print("  6. 📝 搜索历史管理")
-            print("  7. ❓ 帮助")
+            print("  7. 📝 搜索历史管理")
+            print("  8. ❓ 帮助")
             print("  0. 🚪 退出")
         else:
-            print("  6. ❓ 帮助")
+            print("  7. ❓ 帮助")
             print("  0. 🚪 退出")
         print()
 
@@ -3998,7 +4213,7 @@ class TorrentMakerApp:
         return selected_results
 
     def _execute_batch_creation(self, selected_results: list):
-        """执行批量制种"""
+        """执行批量制种 - 集成队列管理"""
         if not selected_results:
             print("❌ 没有选择任何文件夹")
             return
@@ -4007,10 +4222,90 @@ class TorrentMakerApp:
         for i, result in enumerate(selected_results, 1):
             print(f"  {i}. {result['name']}")
 
+        # 预设模式选择
+        print("\n🎯 选择制种预设模式:")
+        if hasattr(self.config, 'display_presets_menu'):
+            self.config.display_presets_menu()
+            preset_choice = input("\n请选择预设模式 (回车使用标准模式): ").strip()
+            
+            available_presets = self.config.get_available_presets() if hasattr(self.config, 'get_available_presets') else ['standard']
+            if preset_choice and preset_choice in available_presets:
+                selected_preset = preset_choice
+            else:
+                selected_preset = 'standard'
+        else:
+            selected_preset = 'standard'
+        
+        print(f"✅ 已选择预设: {selected_preset}")
+
+        # 队列管理选项
+        print("\n⚙️ 队列管理选项:")
+        print("1. 🚀 立即开始 (传统模式)")
+        print("2. 📋 添加到队列 (推荐)")
+        
+        queue_choice = input("请选择处理方式 (1-2, 默认2): ").strip()
+        use_queue = queue_choice != '1'
+        
+        if use_queue:
+            self._execute_batch_with_queue(selected_results, selected_preset)
+        else:
+            self._execute_batch_traditional(selected_results, selected_preset)
+    
+    def _execute_batch_with_queue(self, selected_results: list, preset: str):
+        """使用队列管理执行批量制种"""
+        try:
+            # 导入队列管理器
+            from queue_manager import TorrentQueueManager, TaskPriority
+            
+            # 初始化队列管理器
+            max_concurrent = self.config.get_setting('max_concurrent_operations', 4) if hasattr(self.config, 'get_setting') else 4
+            queue_manager = TorrentQueueManager(
+                torrent_creator=self.creator,
+                max_concurrent=max_concurrent
+            )
+            
+            # 设置回调函数
+            queue_manager.on_task_start = self._on_queue_task_start
+            queue_manager.on_task_complete = self._on_queue_task_complete
+            queue_manager.on_task_failed = self._on_queue_task_failed
+            queue_manager.on_progress_update = self._on_queue_progress_update
+            
+            print(f"\n📋 添加 {len(selected_results)} 个任务到队列...")
+            
+            # 批量添加任务
+            task_ids = []
+            for result in selected_results:
+                task_id = queue_manager.add_torrent_task(
+                    file_path=result['path'],
+                    preset=preset,
+                    priority=TaskPriority.NORMAL
+                )
+                task_ids.append(task_id)
+            
+            print(f"✅ 已添加 {len(task_ids)} 个任务到队列")
+            
+            # 显示队列管理界面
+            self._show_queue_management_interface(queue_manager, task_ids)
+            
+        except ImportError:
+            print("⚠️ 队列管理功能不可用，使用传统模式")
+            self._execute_batch_traditional(selected_results, preset)
+        except Exception as e:
+            print(f"❌ 队列管理初始化失败: {e}")
+            print("🔄 回退到传统模式")
+            self._execute_batch_traditional(selected_results, preset)
+    
+    def _execute_batch_traditional(self, selected_results: list, preset: str):
+        """传统批量制种模式"""
         confirm = input(f"\n确认批量制种这 {len(selected_results)} 个文件夹? (y/N): ").strip().lower()
         if confirm not in ['y', 'yes', '是']:
             print("❌ 已取消批量制种")
             return
+
+        # 应用预设配置
+        if hasattr(self.config, 'apply_preset'):
+            self.config.apply_preset(preset)
+            print(f"✅ 已应用预设配置: {preset}")
 
         print(f"\n🚀 开始批量制种...")
         print("=" * 50)
@@ -4027,6 +4322,489 @@ class TorrentMakerApp:
         if success_count < len(selected_results):
             print(f"❌ 失败: {len(selected_results) - success_count}")
         print(f"✅ 成功率: {success_count/len(selected_results)*100:.1f}%")
+    
+
+    
+    def _display_queue_status(self, status: dict):
+        """显示队列状态"""
+        print(f"\n📊 队列状态: {'🟢 运行中' if status['running'] and not status['paused'] else '🟡 暂停' if status['paused'] else '🔴 已停止'}")
+        print(f"⚡ 并发数: {status['current_running']}/{status['max_concurrent']}")
+        print(f"📋 等待任务: {status['waiting_tasks']} | 总任务: {status['total_tasks']}")
+        
+        stats = status['statistics']
+        print(f"✅ 已完成: {stats['completed_tasks']} | ❌ 失败: {stats['failed_tasks']}")
+        if stats['average_processing_time'] > 0:
+            print(f"⏱️ 平均处理时间: {stats['average_processing_time']:.1f}秒")
+    
+    def _display_task_list(self, queue_manager, task_ids: list):
+        """显示任务列表"""
+        print("\n📋 任务列表:")
+        print("-" * 80)
+        print(f"{'序号':<4} {'任务名称':<25} {'状态':<10} {'进度':<8} {'预设':<10}")
+        print("-" * 80)
+        
+        for i, task_id in enumerate(task_ids[:10], 1):  # 只显示前10个
+            task = queue_manager.get_task(task_id)
+            if task:
+                status_icon = {
+                    'waiting': '⏳',
+                    'running': '🔄',
+                    'completed': '✅',
+                    'failed': '❌',
+                    'paused': '⏸️',
+                    'cancelled': '🚫'
+                }.get(task.status.value, '❓')
+                
+                progress_str = f"{task.progress*100:.1f}%" if task.progress > 0 else "-"
+                
+                print(f"{i:<4} {task.name[:24]:<25} {status_icon}{task.status.value:<9} {progress_str:<8} {task.preset:<10}")
+        
+        if len(task_ids) > 10:
+            print(f"... 还有 {len(task_ids) - 10} 个任务")
+        print("-" * 80)
+    
+    def _show_detailed_statistics(self, queue_manager):
+        """显示详细统计信息"""
+        print("\n" + "=" * 50)
+        print("           📊 详细统计信息")
+        print("=" * 50)
+        
+        status = queue_manager.get_queue_status()
+        stats = status['statistics']
+        status_counts = status['status_counts']
+        
+        print("📋 任务状态分布:")
+        for status_name, count in status_counts.items():
+            if count > 0:
+                icon = {
+                    'waiting': '⏳',
+                    'running': '🔄',
+                    'completed': '✅',
+                    'failed': '❌',
+                    'paused': '⏸️',
+                    'cancelled': '🚫'
+                }.get(status_name, '❓')
+                print(f"  {icon} {status_name}: {count}")
+        
+        print(f"\n⏱️ 性能统计:")
+        print(f"  总处理时间: {stats['total_processing_time']:.1f}秒")
+        if stats['completed_tasks'] > 0:
+            print(f"  平均处理时间: {stats['average_processing_time']:.1f}秒")
+            success_rate = (stats['completed_tasks'] / (stats['completed_tasks'] + stats['failed_tasks'])) * 100
+            print(f"  成功率: {success_rate:.1f}%")
+        
+        print("=" * 50)
+    
+    def _export_queue_report(self, queue_manager):
+        """导出队列报告"""
+        try:
+            import json
+            from datetime import datetime
+            
+            # 生成报告数据
+            report_data = {
+                'export_time': datetime.now().isoformat(),
+                'queue_status': queue_manager.get_queue_status(),
+                'tasks': []
+            }
+            
+            # 添加任务详情
+            for task in queue_manager.get_all_tasks():
+                task_data = task.to_dict()
+                report_data['tasks'].append(task_data)
+            
+            # 保存报告
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            report_file = f"queue_report_{timestamp}.json"
+            
+            with open(report_file, 'w', encoding='utf-8') as f:
+                json.dump(report_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"📄 队列报告已导出: {report_file}")
+            
+        except Exception as e:
+            print(f"❌ 导出报告失败: {e}")
+    
+    # 队列回调函数
+    def _on_queue_task_start(self, task):
+        """任务开始回调"""
+        print(f"🚀 开始处理: {task.name}")
+    
+    def _on_queue_task_complete(self, task):
+        """任务完成回调"""
+        duration = task.actual_duration if task.actual_duration > 0 else 0
+        print(f"✅ 完成: {task.name} (耗时: {duration:.1f}秒)")
+    
+    def _on_queue_task_failed(self, task, error_message: str):
+        """任务失败回调"""
+        print(f"❌ 失败: {task.name} - {error_message}")
+        
+        # 使用错误处理器处理错误
+        try:
+            from error_handler import handle_error
+            handle_error(Exception(error_message), f"制种任务失败: {task.name}")
+        except ImportError:
+            pass  # 错误处理器不可用
+    
+    def _on_queue_progress_update(self, task):
+        """进度更新回调"""
+        # 这里可以实现更复杂的进度显示逻辑
+        # 为了避免输出过多，这里暂时不输出进度信息
+        pass
+    
+    def _show_queue_management_interface(self):
+        """显示队列管理界面入口"""
+        # 检查队列管理器是否可用
+        if self.queue_manager is None:
+            print("❌ 队列管理功能不可用，请确保 queue_manager.py 文件存在")
+            input("\n按回车键继续...")
+            return
+        
+        print("\n" + "=" * 60)
+        print("           🔄 队列管理")
+        print("=" * 60)
+        
+        # 显示队列状态
+        status = self.queue_manager.get_queue_status()
+        self._display_queue_status(status)
+        
+        print("\n🔧 队列管理选项:")
+        print("1. 📋 查看队列详情")
+        print("2. ⚡ 启动队列")
+        print("3. ⏸️ 暂停队列")
+        print("4. ⏹️ 停止队列")
+        print("5. 🗑️ 清理已完成任务")
+        print("6. 📊 查看详细统计")
+        print("7. 💾 导出队列报告")
+        print("0. 🔙 返回主菜单")
+        print("=" * 60)
+        
+        choice = input("请选择操作 (0-7): ").strip()
+        
+        try:
+            if choice == '0':
+                return
+            elif choice == '1':
+                self._show_queue_details()
+            elif choice == '2':
+                self.queue_manager.start_queue()
+                print("🚀 队列已启动")
+            elif choice == '3':
+                self.queue_manager.pause_queue()
+                print("⏸️ 队列已暂停")
+            elif choice == '4':
+                self.queue_manager.stop_queue()
+                print("⏹️ 队列已停止")
+            elif choice == '5':
+                count = self.queue_manager.clear_completed_tasks()
+                print(f"🗑️ 已清理 {count} 个已完成任务")
+            elif choice == '6':
+                self._show_detailed_statistics(self.queue_manager)
+            elif choice == '7':
+                self._export_queue_report(self.queue_manager)
+            else:
+                print("❌ 无效选择")
+        
+        except Exception as e:
+            print(f"❌ 队列管理出错: {e}")
+        
+        if choice != '0':
+            input("\n按回车键继续...")
+    
+    def _show_queue_details(self):
+        """显示队列详情"""
+        if self.queue_manager is None:
+            print("❌ 队列管理器不可用")
+            return
+        
+        print("\n" + "=" * 60)
+        print("           📋 队列详情")
+        print("=" * 60)
+        
+        # 获取所有任务
+        all_tasks = self.queue_manager.get_all_tasks()
+        
+        if not all_tasks:
+            print("\n📭 队列为空")
+            return
+        
+        # 按状态分组显示
+        from queue_manager import TaskStatus
+        
+        status_groups = {
+            TaskStatus.WAITING: "⏳ 等待中",
+            TaskStatus.RUNNING: "🔄 运行中",
+            TaskStatus.COMPLETED: "✅ 已完成",
+            TaskStatus.FAILED: "❌ 失败",
+            TaskStatus.CANCELLED: "🚫 已取消"
+        }
+        
+        for status, status_name in status_groups.items():
+            tasks = [task for task in all_tasks if task.status == status]
+            if tasks:
+                print(f"\n{status_name} ({len(tasks)} 个任务):")
+                for i, task in enumerate(tasks[:10], 1):  # 最多显示10个
+                    print(f"  {i}. {task.name}")
+                    if hasattr(task, 'progress') and task.progress > 0:
+                        print(f"     进度: {task.progress:.1f}%")
+                if len(tasks) > 10:
+                    print(f"     ... 还有 {len(tasks) - 10} 个任务")
+        
+        # 显示队列统计
+        status = self.queue_manager.get_queue_status()
+        stats = status['statistics']
+        print(f"\n📊 队列统计:")
+        print(f"  总任务数: {status['total_tasks']}")
+        print(f"  已完成: {stats['completed_tasks']}")
+        print(f"  失败: {stats['failed_tasks']}")
+        print(f"  成功率: {stats['success_rate']:.1f}%")
+        if stats['average_processing_time'] > 0:
+            print(f"  平均处理时间: {stats['average_processing_time']:.1f}秒")
+    
+    def _preset_management(self):
+        """预设模式管理界面"""
+        while True:
+            print("\n" + "=" * 50)
+            print("           ⚡ 预设模式管理")
+            print("=" * 50)
+            
+            # 显示当前可用预设
+            presets = self.config_manager.get_available_presets()
+            if presets:
+                print("\n📋 可用预设模式:")
+                self.config_manager.display_presets_menu()
+            else:
+                print("\n❌ 无可用预设模式")
+            
+            print("\n🔧 管理选项:")
+            print("1. 📖 查看预设详情")
+            print("2. ⚡ 应用预设")
+            print("3. 💾 保存当前配置为预设")
+            print("4. 🗑️ 删除自定义预设")
+            print("5. 🔍 自动检测推荐预设")
+            print("0. 🔙 返回配置管理")
+            print("=" * 50)
+            
+            choice = input("请选择操作 (0-5): ").strip()
+            
+            try:
+                if choice == '0':
+                    break
+                elif choice == '1':
+                    self._view_preset_details()
+                elif choice == '2':
+                    self._apply_preset_interactive()
+                elif choice == '3':
+                    self._save_custom_preset()
+                elif choice == '4':
+                    self._delete_custom_preset()
+                elif choice == '5':
+                    self._auto_detect_preset()
+                else:
+                    print("❌ 无效选择，请输入 0-5 之间的数字")
+            
+            except Exception as e:
+                print(f"❌ 操作过程中发生错误: {e}")
+                print("请重试或联系技术支持")
+            
+            if choice != '0':
+                input("\n按回车键继续...")
+    
+    def _view_preset_details(self):
+        """查看预设详情"""
+        presets = self.config_manager.get_available_presets()
+        if not presets:
+            print("\n❌ 无可用预设模式")
+            return
+        
+        print("\n请选择要查看的预设:")
+        for i, preset_name in enumerate(presets, 1):
+            print(f"{i}. {preset_name}")
+        
+        try:
+            choice = int(input("\n请输入预设编号: ").strip())
+            if 1 <= choice <= len(presets):
+                preset_name = presets[choice - 1]
+                preset_info = self.config_manager.get_preset_info(preset_name)
+                
+                if preset_info:
+                    print(f"\n📋 预设详情: {preset_name}")
+                    print("=" * 40)
+                    print(f"描述: {preset_info.get('description', '无描述')}")
+                    print(f"类型: {'系统预设' if preset_info.get('is_system', True) else '自定义预设'}")
+                    print(f"推荐场景: {preset_info.get('recommended_for', '通用')}")
+                    
+                    print("\n⚙️ 配置参数:")
+                    settings = preset_info.get('settings', {})
+                    for key, value in settings.items():
+                        print(f"  {key}: {value}")
+                else:
+                    print(f"❌ 无法获取预设 '{preset_name}' 的详情")
+            else:
+                print("❌ 无效的预设编号")
+        except ValueError:
+            print("❌ 请输入有效的数字")
+    
+    def _apply_preset_interactive(self):
+        """交互式应用预设"""
+        presets = self.config_manager.get_available_presets()
+        if not presets:
+            print("\n❌ 无可用预设模式")
+            return
+        
+        print("\n请选择要应用的预设:")
+        for i, preset_name in enumerate(presets, 1):
+            preset_info = self.config_manager.get_preset_info(preset_name)
+            description = preset_info.get('description', '无描述') if preset_info else '无描述'
+            print(f"{i}. {preset_name} - {description}")
+        
+        try:
+            choice = int(input("\n请输入预设编号: ").strip())
+            if 1 <= choice <= len(presets):
+                preset_name = presets[choice - 1]
+                
+                # 确认应用
+                confirm = input(f"\n确认应用预设 '{preset_name}'? (y/N): ").strip().lower()
+                if confirm in ['y', 'yes', '是']:
+                    if self.config_manager.apply_preset(preset_name):
+                        print(f"✅ 预设 '{preset_name}' 应用成功")
+                        print("💡 提示: 新配置将在下次制种时生效")
+                    else:
+                        print(f"❌ 预设 '{preset_name}' 应用失败")
+                else:
+                    print("❌ 操作已取消")
+            else:
+                print("❌ 无效的预设编号")
+        except ValueError:
+            print("❌ 请输入有效的数字")
+    
+    def _save_custom_preset(self):
+        """保存自定义预设"""
+        print("\n💾 保存当前配置为自定义预设")
+        print("=" * 40)
+        
+        preset_name = input("请输入预设名称: ").strip()
+        if not preset_name:
+            print("❌ 预设名称不能为空")
+            return
+        
+        # 检查是否已存在
+        existing_presets = self.config_manager.get_available_presets()
+        if preset_name in existing_presets:
+            confirm = input(f"预设 '{preset_name}' 已存在，是否覆盖? (y/N): ").strip().lower()
+            if confirm not in ['y', 'yes', '是']:
+                print("❌ 操作已取消")
+                return
+        
+        description = input("请输入预设描述 (可选): ").strip()
+        recommended_for = input("请输入推荐使用场景 (可选): ").strip()
+        
+        if self.config_manager.save_custom_preset(preset_name, description, recommended_for):
+            print(f"✅ 自定义预设 '{preset_name}' 保存成功")
+        else:
+            print(f"❌ 自定义预设 '{preset_name}' 保存失败")
+    
+    def _delete_custom_preset(self):
+        """删除自定义预设"""
+        presets = self.config_manager.get_available_presets()
+        custom_presets = []
+        
+        # 筛选出自定义预设
+        for preset_name in presets:
+            preset_info = self.config_manager.get_preset_info(preset_name)
+            if preset_info and not preset_info.get('is_system', True):
+                custom_presets.append(preset_name)
+        
+        if not custom_presets:
+            print("\n❌ 无自定义预设可删除")
+            return
+        
+        print("\n🗑️ 可删除的自定义预设:")
+        for i, preset_name in enumerate(custom_presets, 1):
+            preset_info = self.config_manager.get_preset_info(preset_name)
+            description = preset_info.get('description', '无描述') if preset_info else '无描述'
+            print(f"{i}. {preset_name} - {description}")
+        
+        try:
+            choice = int(input("\n请输入要删除的预设编号: ").strip())
+            if 1 <= choice <= len(custom_presets):
+                preset_name = custom_presets[choice - 1]
+                
+                # 确认删除
+                confirm = input(f"\n确认删除预设 '{preset_name}'? (y/N): ").strip().lower()
+                if confirm in ['y', 'yes', '是']:
+                    if self.config_manager.delete_custom_preset(preset_name):
+                        print(f"✅ 自定义预设 '{preset_name}' 删除成功")
+                    else:
+                        print(f"❌ 自定义预设 '{preset_name}' 删除失败")
+                else:
+                    print("❌ 操作已取消")
+            else:
+                print("❌ 无效的预设编号")
+        except ValueError:
+            print("❌ 请输入有效的数字")
+    
+    def _auto_detect_preset(self):
+        """自动检测推荐预设"""
+        print("\n🔍 自动检测推荐预设")
+        print("=" * 40)
+        
+        # 获取资源文件夹
+        resource_folder = self.config_manager.get_resource_folder()
+        if not resource_folder or not os.path.exists(resource_folder):
+            print("❌ 请先设置有效的资源文件夹")
+            return
+        
+        try:
+            # 计算文件夹总大小
+            total_size = 0
+            file_count = 0
+            
+            print("正在分析资源文件夹...")
+            for root, dirs, files in os.walk(resource_folder):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    try:
+                        total_size += os.path.getsize(file_path)
+                        file_count += 1
+                    except (OSError, IOError):
+                        continue
+            
+            if total_size == 0:
+                print("❌ 资源文件夹为空或无法访问")
+                return
+            
+            # 转换为可读格式
+            size_gb = total_size / (1024 ** 3)
+            
+            print(f"📊 分析结果:")
+            print(f"  文件总数: {file_count:,}")
+            print(f"  总大小: {size_gb:.2f} GB")
+            
+            # 自动检测推荐预设
+            recommended_preset = self.config_manager.auto_detect_preset(total_size)
+            
+            if recommended_preset:
+                preset_info = self.config_manager.get_preset_info(recommended_preset)
+                description = preset_info.get('description', '无描述') if preset_info else '无描述'
+                
+                print(f"\n💡 推荐预设: {recommended_preset}")
+                print(f"   描述: {description}")
+                
+                # 询问是否应用
+                confirm = input(f"\n是否应用推荐预设 '{recommended_preset}'? (y/N): ").strip().lower()
+                if confirm in ['y', 'yes', '是']:
+                    if self.config_manager.apply_preset(recommended_preset):
+                        print(f"✅ 预设 '{recommended_preset}' 应用成功")
+                    else:
+                        print(f"❌ 预设 '{recommended_preset}' 应用失败")
+                else:
+                    print("❌ 操作已取消")
+            else:
+                print("\n❌ 无法确定推荐预设，建议手动选择")
+        
+        except Exception as e:
+            print(f"❌ 分析过程中发生错误: {e}")
 
     def config_management(self):
         """配置管理"""
@@ -4043,10 +4821,11 @@ class TorrentMakerApp:
             print("7. 📥 导入配置")
             print("8. 🧹 清理缓存")
             print("9. 🔄 重置为默认配置")
+            print("10. ⚡ 预设模式管理")
             print("0. 🔙 返回主菜单")
             print("=" * 50)
 
-            choice = input("请选择操作 (0-9): ").strip()
+            choice = input("请选择操作 (0-10): ").strip()
 
             try:
                 if choice == '0':
@@ -4069,8 +4848,10 @@ class TorrentMakerApp:
                     self._clear_cache()
                 elif choice == '9':
                     self._reset_config()
+                elif choice == '10':
+                    self._preset_management()
                 else:
-                    print("❌ 无效选择，请输入 0-9 之间的数字")
+                    print("❌ 无效选择，请输入 0-10 之间的数字")
 
             except Exception as e:
                 print(f"❌ 操作过程中发生错误: {e}")
@@ -4449,7 +5230,7 @@ class TorrentMakerApp:
         while True:
             try:
                 self.display_menu()
-                max_choice = 7 if ENHANCED_FEATURES_AVAILABLE else 6
+                max_choice = 8 if ENHANCED_FEATURES_AVAILABLE else 7
                 choice = input(f"请选择操作 (0-{max_choice}): ").strip()
 
                 if choice == '0':
@@ -4466,11 +5247,13 @@ class TorrentMakerApp:
                 elif choice == '5':
                     self.show_performance_stats()
                 elif choice == '6':
+                    self._show_queue_management_interface()
+                elif choice == '7':
                     if ENHANCED_FEATURES_AVAILABLE:
                         self.search_history_management()
                     else:
                         self.show_help()
-                elif choice == '7' and ENHANCED_FEATURES_AVAILABLE:
+                elif choice == '8' and ENHANCED_FEATURES_AVAILABLE:
                     self.show_help()
                 else:
                     print("❌ 无效选择，请重新输入")
