@@ -5,6 +5,12 @@
 Torrent Maker - 单文件版本 v1.9.10
 基于 mktorrent 的高性能半自动化种子制作工具
 
+🎯 v1.9.16 队列管理类型错误修复版本:
+- 🔧 修复队列管理中字符串与整数比较的类型错误
+- 🛡️ 增强任务数据序列化/反序列化的安全性
+- 📋 改进枚举类型转换的容错处理
+- 🚀 提升队列管理系统的稳定性
+
 🎯 v1.9.15 制种失败问题修复版本:
 - 🔧 修复tracker URL格式错误（移除反引号等非法字符）
 - ✅ 改进时间戳精度到微秒级，解决文件名冲突问题
@@ -136,7 +142,7 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v1.9.15"
+VERSION = "v1.9.16"
 VERSION_NAME = "搜索历史快捷键增强版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
@@ -208,8 +214,26 @@ class QueueTask:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'QueueTask':
         """从字典创建任务对象"""
-        data['status'] = TaskStatus(data['status'])
-        data['priority'] = TaskPriority(data['priority'])
+        # 安全转换状态枚举
+        try:
+            if isinstance(data['status'], str):
+                data['status'] = TaskStatus[data['status']]
+            else:
+                data['status'] = TaskStatus(data['status'])
+        except (KeyError, ValueError):
+            data['status'] = TaskStatus.WAITING
+        
+        # 安全转换优先级枚举
+        try:
+            if isinstance(data['priority'], str):
+                # 如果是字符串，尝试按名称查找
+                data['priority'] = TaskPriority[data['priority']]
+            else:
+                # 如果是数字，按值查找
+                data['priority'] = TaskPriority(int(data['priority']))
+        except (KeyError, ValueError, TypeError):
+            data['priority'] = TaskPriority.NORMAL
+        
         return cls(**data)
 
 
