@@ -166,8 +166,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v2.0.2"
-VERSION_NAME = "批量制种修复版"
+VERSION = "2.0.3"
+VERSION_NAME = "队列启动信息优化版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 # 触发GitHub Actions自动发布 - 2025-06-27
 
@@ -260,6 +260,121 @@ class QueueTask:
             data['priority'] = TaskPriority.NORMAL
         
         return cls(**data)
+
+
+class QueueStatusDisplay:
+    """队列状态显示管理类"""
+    
+    def __init__(self):
+        self.last_display_time = 0
+        self.last_status_hash = None
+        self.display_interval = 1.0  # 最小显示间隔（秒）
+    
+    def display_status(self, queue_manager, mode: str = "standard", force_update: bool = False):
+        """统一的队列状态显示接口
+        
+        Args:
+            queue_manager: 队列管理器实例
+            mode: 显示模式 ('compact', 'standard', 'detailed')
+            force_update: 强制更新显示
+        """
+        if not queue_manager:
+            print("❌ 队列管理器不可用")
+            return
+        
+        # 获取状态信息
+        status = queue_manager.get_queue_status()
+        current_time = time.time()
+        
+        # 生成状态哈希，用于检测变化
+        status_hash = self._generate_status_hash(status)
+        
+        # 检查是否需要更新显示
+        if not force_update:
+            if (current_time - self.last_display_time < self.display_interval and 
+                status_hash == self.last_status_hash):
+                return
+        
+        # 根据模式显示信息
+        if mode == "compact":
+            self._display_compact_status(status)
+        elif mode == "detailed":
+            self._display_detailed_status(status, queue_manager)
+        else:  # standard
+            self._display_standard_status(status)
+        
+        # 更新显示记录
+        self.last_display_time = current_time
+        self.last_status_hash = status_hash
+    
+    def _generate_status_hash(self, status: dict) -> str:
+        """生成状态哈希值用于变化检测"""
+        import hashlib
+        key_info = {
+            'running': status.get('running', False),
+            'paused': status.get('paused', False),
+            'current_running': status.get('current_running', 0),
+            'waiting_tasks': status.get('waiting_tasks', 0),
+            'total_tasks': status.get('total_tasks', 0),
+            'completed': status.get('statistics', {}).get('completed_tasks', 0),
+            'failed': status.get('statistics', {}).get('failed_tasks', 0)
+        }
+        return hashlib.md5(str(key_info).encode()).hexdigest()
+    
+    def _display_compact_status(self, status: dict):
+        """简洁模式显示"""
+        running_status = "🟢 运行中" if status['running'] and not status['paused'] else "🟡 暂停" if status['paused'] else "🔴 已停止"
+        print(f"📊 队列: {running_status} | 任务: {status['current_running']}/{status['max_concurrent']} | 等待: {status['waiting_tasks']}")
+    
+    def _display_standard_status(self, status: dict):
+        """标准模式显示"""
+        print(f"\n📊 队列状态: {'🟢 运行中' if status['running'] and not status['paused'] else '🟡 暂停' if status['paused'] else '🔴 已停止'}")
+        print(f"⚡ 并发数: {status['current_running']}/{status['max_concurrent']}")
+        print(f"📋 等待任务: {status['waiting_tasks']} | 总任务: {status['total_tasks']}")
+        
+        stats = status['statistics']
+        print(f"✅ 已完成: {stats['completed_tasks']} | ❌ 失败: {stats['failed_tasks']}")
+        if stats['average_processing_time'] > 0:
+            print(f"⏱️ 平均处理时间: {stats['average_processing_time']:.1f}秒")
+    
+    def _display_detailed_status(self, status: dict, queue_manager):
+        """详细模式显示"""
+        print("\n" + "="*60)
+        print("           📊 队列详细状态")
+        print("="*60)
+        
+        # 基本状态
+        self._display_standard_status(status)
+        
+        # 正在运行的任务
+        running_tasks = [task for task in queue_manager.get_all_tasks() 
+                        if task.status == TaskStatus.RUNNING]
+        if running_tasks:
+            print(f"\n🔄 正在处理 ({len(running_tasks)} 个任务):")
+            for task in running_tasks:
+                progress_str = f" ({task.progress*100:.1f}%)" if task.progress > 0 else ""
+                print(f"  • {task.name}{progress_str}")
+        
+        # 等待队列
+        waiting_tasks = [task for task in queue_manager.get_all_tasks() 
+                        if task.status == TaskStatus.WAITING]
+        if waiting_tasks:
+            print(f"\n⏳ 等待队列 ({len(waiting_tasks)} 个任务):")
+            for i, task in enumerate(waiting_tasks[:5], 1):
+                print(f"  {i}. {task.name}")
+            if len(waiting_tasks) > 5:
+                print(f"     ... 还有 {len(waiting_tasks) - 5} 个任务")
+        
+        # 性能统计
+        stats = status['statistics']
+        if stats['completed_tasks'] > 0 or stats['failed_tasks'] > 0:
+            print(f"\n📈 性能统计:")
+            print(f"  总处理时间: {stats['total_processing_time']:.1f}秒")
+            if stats['completed_tasks'] > 0:
+                success_rate = (stats['completed_tasks'] / (stats['completed_tasks'] + stats['failed_tasks'])) * 100
+                print(f"  成功率: {success_rate:.1f}%")
+        
+        print("="*60)
 
 
 class QueueManager:
@@ -5603,6 +5718,16 @@ class TorrentMakerApp:
         self.matcher = None
         self.creator = None
         self.queue_manager = None  # 队列管理器
+        self.status_display = QueueStatusDisplay()  # 队列状态显示管理器
+        
+        # 队列显示配置
+        self.queue_display_config = {
+            'default_mode': 'standard',  # compact, standard, detailed
+            'auto_update_interval': 2.0,  # 自动更新间隔(秒)
+            'show_progress': True,  # 是否显示进度信息
+            'show_statistics': True,  # 是否显示统计信息
+            'compact_on_start': True,  # 任务启动时使用简洁模式
+        }
         
         # 初始化增强功能模块
         if ENHANCED_FEATURES_AVAILABLE:
@@ -5706,48 +5831,8 @@ class TorrentMakerApp:
         return True
 
     def _display_enhanced_queue_status(self):
-        """显示增强的队列状态信息"""
-        if not self.queue_manager:
-            print("❌ 队列管理器不可用")
-            return
-            
-        print("\n" + "=" * 60)
-        print("           📊 队列运行状态")
-        print("=" * 60)
-        
-        # 获取队列状态
-        status = self.queue_manager.get_queue_status()
-        
-        # 显示运行状态
-        if self.queue_manager.is_running():
-            print("🔄 队列状态: 运行中")
-        elif self.queue_manager.is_paused():
-            print("⏸️ 队列状态: 已暂停")
-        else:
-            print("⏹️ 队列状态: 已停止")
-            
-        print(f"📈 并发任务数: {status['running_tasks']}/{self.queue_manager.max_concurrent}")
-        
-        # 显示当前正在处理的任务
-        running_tasks = [task for task in self.queue_manager.get_all_tasks() 
-                        if task.status == TaskStatus.RUNNING]
-        if running_tasks:
-            print(f"\n🔄 正在处理 ({len(running_tasks)} 个任务):")
-            for task in running_tasks:
-                progress_str = ""
-                if hasattr(task, 'progress') and task.progress > 0:
-                    progress_str = f" ({task.progress:.1f}%)"
-                print(f"  • {task.name}{progress_str}")
-        
-        # 显示等待队列
-        waiting_tasks = [task for task in self.queue_manager.get_all_tasks() 
-                        if task.status == TaskStatus.WAITING]
-        if waiting_tasks:
-            print(f"\n⏳ 等待队列 ({len(waiting_tasks)} 个任务):")
-            for i, task in enumerate(waiting_tasks[:5], 1):
-                print(f"  {i}. {task.name}")
-            if len(waiting_tasks) > 5:
-                print(f"     ... 还有 {len(waiting_tasks) - 5} 个任务")
+        """显示增强的队列状态信息（使用详细模式）"""
+        self.status_display.display_status(self.queue_manager, mode="detailed", force_update=True)
         
         # 显示统计信息
         stats = status['statistics']
@@ -6524,16 +6609,9 @@ class TorrentMakerApp:
     
 
     
-    def _display_queue_status(self, status: dict):
-        """显示队列状态"""
-        print(f"\n📊 队列状态: {'🟢 运行中' if status['running'] and not status['paused'] else '🟡 暂停' if status['paused'] else '🔴 已停止'}")
-        print(f"⚡ 并发数: {status['current_running']}/{status['max_concurrent']}")
-        print(f"📋 等待任务: {status['waiting_tasks']} | 总任务: {status['total_tasks']}")
-        
-        stats = status['statistics']
-        print(f"✅ 已完成: {stats['completed_tasks']} | ❌ 失败: {stats['failed_tasks']}")
-        if stats['average_processing_time'] > 0:
-            print(f"⏱️ 平均处理时间: {stats['average_processing_time']:.1f}秒")
+    def _display_queue_status(self, status: dict = None, mode: str = "standard"):
+        """显示队列状态（统一接口）"""
+        self.status_display.display_status(self.queue_manager, mode=mode, force_update=True)
     
     def _display_task_list(self, queue_manager, task_ids: list):
         """显示任务列表"""
@@ -6626,17 +6704,23 @@ class TorrentMakerApp:
     
     # 队列回调函数
     def _on_queue_task_start(self, task):
-        """任务开始回调"""
-        print(f"🚀 开始处理: {task.name}")
+        """任务开始回调（简化输出）"""
+        # 根据配置决定显示模式
+        mode = "compact" if self.queue_display_config.get('compact_on_start', True) else self.queue_display_config.get('default_mode', 'standard')
+        self.status_display.display_status(self.queue_manager, mode=mode)
     
     def _on_queue_task_complete(self, task):
-        """任务完成回调"""
+        """任务完成回调（优化输出）"""
         duration = task.actual_duration if task.actual_duration > 0 else 0
-        print(f"✅ 完成: {task.name} (耗时: {duration:.1f}秒)")
+        print(f"✅ {task.name} 完成 ({duration:.1f}s)")
+        # 显示简洁状态更新
+        self.status_display.display_status(self.queue_manager, mode="compact")
     
     def _on_queue_task_failed(self, task, error_message: str):
-        """任务失败回调"""
-        print(f"❌ 失败: {task.name} - {error_message}")
+        """任务失败回调（优化输出）"""
+        print(f"❌ {task.name} 失败: {error_message}")
+        # 显示简洁状态更新
+        self.status_display.display_status(self.queue_manager, mode="compact")
         
         # 使用错误处理器处理错误
         try:
@@ -6668,8 +6752,7 @@ class TorrentMakerApp:
         print("=" * 60)
         
         # 显示队列状态
-        status = queue_manager.get_queue_status()
-        self._display_queue_status(status)
+        self._display_queue_status(mode="standard")
         
         print("\n🔧 队列管理选项:")
         print("1. 📋 查看队列详情")
@@ -6693,7 +6776,8 @@ class TorrentMakerApp:
                 self._show_queue_details()
             elif choice == '2':
                 queue_manager.start_queue()
-                print("🚀 队列已启动")
+                # 使用统一状态显示接口，避免重复信息
+                self.status_display.display_status(queue_manager, mode="standard", force_update=True)
             elif choice == '3':
                 queue_manager.pause_queue()
                 print("⏸️ 队列已暂停")
