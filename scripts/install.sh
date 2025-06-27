@@ -127,7 +127,7 @@ get_latest_version() {
     
     # 如果仍然没有找到版本，使用默认版本
     if [[ -z "$version" ]]; then
-        version="1.9.19"
+        version="2.0.0"
     fi
     
     echo "$version"

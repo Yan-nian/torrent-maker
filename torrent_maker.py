@@ -2,8 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v2.0.0
+Torrent Maker - 单文件版本 v2.0.1
 基于 mktorrent 的高性能半自动化种子制作工具
+
+🎯 v2.0.1 自动发布流程优化版本:
+- 🤖 新增GitHub Actions自动发布工作流
+- 🔄 版本变更时自动创建Release和标签
+- 📦 自动生成发布包和安装说明
+- 🛠️ 增加手动发布备用流程
+- ✨ 优化发布流程的用户体验
 
 🎯 v2.0.0 一键安装脚本重构版本:
 - 🔧 完全重构安装脚本，从1186行简化为150行标准版
@@ -157,7 +164,7 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v2.0.0"
+VERSION = "v2.0.1"
 VERSION_NAME = "一键安装脚本重构版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 

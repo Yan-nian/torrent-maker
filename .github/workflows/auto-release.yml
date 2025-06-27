@@ -1,0 +1,197 @@
+name: Auto Release
+
+# 监测版本变更自动发布
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'torrent_maker.py' ]
+
+# 设置权限
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  auto-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整历史用于版本比较
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Extract and validate version
+      id: version
+      run: |
+        # 提取当前版本号
+        CURRENT_VERSION=$(grep -E '^VERSION\s*=\s*"v[0-9]+\.[0-9]+\.[0-9]+"' torrent_maker.py | sed -E 's/.*"v([0-9]+\.[0-9]+\.[0-9]+)".*/\1/' | head -1)
+        
+        if [ -z "$CURRENT_VERSION" ]; then
+          echo "❌ 无法提取版本号"
+          exit 1
+        fi
+        
+        echo "📋 检测到版本: v$CURRENT_VERSION"
+        
+        # 检查标签是否已存在
+        if git tag | grep -q "^v$CURRENT_VERSION$"; then
+          echo "⚠️ 版本 v$CURRENT_VERSION 已存在，跳过发布"
+          echo "should_release=false" >> $GITHUB_OUTPUT
+        else
+          echo "🚀 新版本检测: v$CURRENT_VERSION，准备发布"
+          echo "should_release=true" >> $GITHUB_OUTPUT
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Validate torrent_maker.py
+      if: steps.version.outputs.should_release == 'true'
+      run: |
+        echo "🔍 验证 torrent_maker.py 语法..."
+        python3 -m py_compile torrent_maker.py
+        echo "✅ 语法验证通过"
+        
+        echo "📊 文件信息:"
+        ls -lh torrent_maker.py
+        wc -l torrent_maker.py
+    
+    - name: Generate release notes
+      if: steps.version.outputs.should_release == 'true'
+      id: release_notes
+      run: |
+        VERSION="v${{ steps.version.outputs.version }}"
+        
+        # 从 torrent_maker.py 提取版本说明
+        RELEASE_NOTES=$(python3 -c "
+import re
+with open('torrent_maker.py', 'r', encoding='utf-8') as f:
+    content = f.read()
+    
+# 提取版本描述
+version_pattern = r'🎯 v${{ steps.version.outputs.version }}[^🎯]*?(?=🎯|$)'
+match = re.search(version_pattern, content, re.DOTALL)
+if match:
+    print(match.group(0).strip())
+else:
+    print('## 🚀 Torrent Maker $VERSION\n\n### ✨ 新版本发布\n- 性能优化和功能改进\n- 修复已知问题\n- 提升用户体验')
+")
+        
+        # 添加下载说明
+        cat << EOF > release_notes.md
+$RELEASE_NOTES
+
+## 📥 快速开始
+
+### 方式一：一键安装（推荐）
+\`\`\`bash
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash
+\`\`\`
+
+### 方式二：直接下载
+\`\`\`bash
+# 下载单文件版本
+curl -O https://github.com/Yan-nian/torrent-maker/releases/download/$VERSION/torrent_maker.py
+
+# 直接运行
+python3 torrent_maker.py
+\`\`\`
+
+### 方式三：Git 克隆
+\`\`\`bash
+git clone https://github.com/Yan-nian/torrent-maker.git
+cd torrent-maker
+python3 torrent_maker.py
+\`\`\`
+
+## 📋 系统要求
+- Python 3.7+
+- mktorrent
+- 512MB+ 内存
+
+## 🔧 安装 mktorrent
+**macOS**: \`brew install mktorrent\`  
+**Ubuntu/Debian**: \`sudo apt install mktorrent\`  
+**CentOS/RHEL**: \`sudo yum install mktorrent\`
+
+---
+
+💡 **提示**: 单文件版本包含所有功能，无需额外依赖，真正的开箱即用！
+EOF
+        
+        echo "📝 Release notes 已生成"
+    
+    - name: Create release package
+      if: steps.version.outputs.should_release == 'true'
+      run: |
+        VERSION="v${{ steps.version.outputs.version }}"
+        echo "📦 创建发布包..."
+        
+        # 创建发布目录
+        mkdir -p release
+        
+        # 复制核心文件
+        cp torrent_maker.py release/
+        cp scripts/install.sh release/
+        cp README.md release/
+        cp requirements.txt release/
+        cp LICENSE release/
+        
+        # 创建压缩包
+        cd release
+        tar -czf "torrent-maker-$VERSION.tar.gz" *
+        cd ..
+        
+        echo "✅ 发布包创建完成"
+        ls -la release/
+    
+    - name: Create Git tag
+      if: steps.version.outputs.should_release == 'true'
+      run: |
+        VERSION="v${{ steps.version.outputs.version }}"
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        git tag -a "$VERSION" -m "Release $VERSION"
+        git push origin "$VERSION"
+        
+        echo "🏷️ 标签 $VERSION 已创建"
+    
+    - name: Create GitHub Release
+      if: steps.version.outputs.should_release == 'true'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ steps.version.outputs.version }}
+        name: 🎬 Torrent Maker v${{ steps.version.outputs.version }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+        files: |
+          torrent_maker.py
+          scripts/install.sh
+          README.md
+          requirements.txt
+          LICENSE
+          release/torrent-maker-v${{ steps.version.outputs.version }}.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Update installation script cache
+      if: steps.version.outputs.should_release == 'true'
+      run: |
+        echo "🔄 触发安装脚本缓存更新..."
+        # 这里可以添加 CDN 缓存刷新逻辑
+        echo "✅ 发布流程完成"
+    
+    - name: Notify completion
+      if: steps.version.outputs.should_release == 'true'
+      run: |
+        VERSION="v${{ steps.version.outputs.version }}"
+        echo "🎉 自动发布完成！"
+        echo "📋 版本: $VERSION"
+        echo "🔗 Release: https://github.com/Yan-nian/torrent-maker/releases/tag/$VERSION"
+        echo "📥 安装: curl -fsSL https://raw.githubusercontent.com/Yan-nian/torrent-maker/main/scripts/install.sh | bash"
