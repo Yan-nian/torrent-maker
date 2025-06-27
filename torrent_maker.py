@@ -5,6 +5,13 @@
 Torrent Maker - 单文件版本 v1.9.10
 基于 mktorrent 的高性能半自动化种子制作工具
 
+🎯 v1.9.14 队列管理修复版本:
+- 🔧 修复队列详情显示为空的问题
+- ✅ 修正队列文件保存路径不一致导致的数据丢失
+- 🔄 确保队列状态和任务数据同步显示
+- 📋 修复队列管理功能的数据持久化问题
+- 🚀 提升队列管理系统的稳定性和可靠性
+
 🎯 v1.9.13 搜索历史快捷键增强版本:
 - ✨ 新增搜索历史快捷键选择功能（输入数字1-5直接选择历史搜索）
 - 🔍 优化搜索界面提示信息，支持快捷键和手动输入双模式
@@ -5448,10 +5455,12 @@ class TorrentMakerApp:
             
             # 初始化队列管理器（已内置）
             try:
+                # 使用绝对路径确保队列文件保存在正确位置
+                queue_file = os.path.expanduser("~/.torrent_maker/torrent_queue.json")
                 self.queue_manager = TorrentQueueManager(
                     self.creator,
                     max_concurrent=max_workers,
-                    save_file="torrent_queue.json"
+                    save_file=queue_file
                 )
                 # 设置回调函数
                 self.queue_manager.set_callbacks(
@@ -6019,9 +6028,12 @@ class TorrentMakerApp:
             
             # 初始化队列管理器
             max_concurrent = self.config.get_setting('max_concurrent_operations', 4) if hasattr(self.config, 'get_setting') else 4
+            # 使用与主队列管理器相同的文件路径
+            queue_file = os.path.expanduser("~/.torrent_maker/torrent_queue.json")
             queue_manager = TorrentQueueManager(
                 torrent_creator=self.creator,
-                max_concurrent=max_concurrent
+                max_concurrent=max_concurrent,
+                save_file=queue_file
             )
             
             # 设置回调函数
