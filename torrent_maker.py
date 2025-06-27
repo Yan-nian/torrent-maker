@@ -166,8 +166,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "2.0.4"
-VERSION_NAME = "搜索功能修复版"
+VERSION = "2.0.5"
+VERSION_NAME = "搜索队列流程优化版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 # 触发GitHub Actions自动发布 - 2025-06-27
 
@@ -512,16 +512,37 @@ class QueueManager:
             if task.status == TaskStatus.RUNNING:
                 self.cancel_task(task_id)
             
-            # 从队列中移除
+            # 从任务字典中移除
             del self.tasks[task_id]
             
             # 从运行任务中移除
             if task_id in self.running_tasks:
                 del self.running_tasks[task_id]
             
+            # 重建优先级队列（移除已删除的任务）
+            self._rebuild_priority_queue()
+            
             self.logger.info(f"任务已移除: {task.name} (ID: {task_id})")
             self._save_queue()
             return True
+    
+    def _rebuild_priority_queue(self):
+        """重建优先级队列，移除已删除的任务"""
+        # 创建新的优先级队列
+        new_queue = queue.PriorityQueue()
+        
+        # 将现有队列中的有效任务重新加入
+        while not self.priority_queue.empty():
+            try:
+                task = self.priority_queue.get_nowait()
+                # 只有在tasks字典中存在的任务才重新加入队列
+                if task.task_id in self.tasks:
+                    new_queue.put(task)
+            except queue.Empty:
+                break
+        
+        # 替换旧队列
+        self.priority_queue = new_queue
     
     def pause_task(self, task_id: str) -> bool:
         """暂停任务"""
@@ -6585,8 +6606,35 @@ class TorrentMakerApp:
             
             print(f"✅ 已添加 {len(task_ids)} 个任务到队列")
             
-            # 显示队列管理界面
-            self._show_queue_management_interface(queue_manager, task_ids)
+            # 询问用户后续操作
+            print("\n📋 任务已添加到队列，请选择后续操作:")
+            print("1. 🔍 继续搜索")
+            print("2. 🚀 启动队列")
+            print("3. ⚙️ 进入队列管理")
+            print("4. 🏠 返回主菜单")
+            
+            while True:
+                choice = input("请选择操作 (1-4, 默认1): ").strip()
+                if not choice:
+                    choice = '1'
+                
+                if choice == '1':
+                    print("🔍 继续搜索...")
+                    return  # 返回到搜索流程
+                elif choice == '2':
+                    print("🚀 启动队列...")
+                    queue_manager.start_queue()
+                    print("✅ 队列已启动")
+                    return
+                elif choice == '3':
+                    print("⚙️ 进入队列管理...")
+                    self._show_queue_management_interface(queue_manager, task_ids)
+                    return
+                elif choice == '4':
+                    print("🏠 返回主菜单")
+                    return
+                else:
+                    print("❌ 无效选择，请输入 1-4")
             
         except ImportError:
             print("⚠️ 队列管理功能不可用，使用传统模式")
