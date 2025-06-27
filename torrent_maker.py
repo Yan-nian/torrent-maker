@@ -142,8 +142,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v1.9.16"
-VERSION_NAME = "搜索历史快捷键增强版"
+VERSION = "v1.9.17"
+VERSION_NAME = "队列功能优化版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
@@ -901,8 +901,49 @@ class TorrentQueueManager(QueueManager):
                         priority: TaskPriority = TaskPriority.NORMAL,
                         output_path: str = "") -> str:
         """添加制种任务"""
-        name = os.path.basename(file_path)
+        name = self._generate_smart_task_name(file_path)
         return self.add_task(name, file_path, priority, preset, output_path)
+    
+    def _generate_smart_task_name(self, file_path: str) -> str:
+        """生成智能任务名称"""
+        try:
+            from pathlib import Path
+            path_obj = Path(file_path)
+            
+            # 如果是文件夹，显示更有意义的路径
+            if path_obj.is_dir():
+                # 尝试获取相对于资源文件夹的路径
+                try:
+                    if hasattr(self.torrent_creator, 'config_manager'):
+                        resource_folder = self.torrent_creator.config_manager.get_resource_folder()
+                        if resource_folder:
+                            resource_path = Path(resource_folder)
+                            relative_path = path_obj.relative_to(resource_path)
+                            name = str(relative_path)
+                        else:
+                            raise ValueError("No resource folder")
+                    else:
+                        raise ValueError("No config manager")
+                except (ValueError, AttributeError):
+                    # 如果不在资源文件夹内或无法获取，显示最后两级目录
+                    parts = path_obj.parts
+                    if len(parts) >= 2:
+                        name = os.path.join(parts[-2], parts[-1])
+                    else:
+                        name = path_obj.name
+            else:
+                name = path_obj.name
+            
+            # 限制名称长度，避免界面显示问题
+            if len(name) > 50:
+                name = name[:47] + "..."
+            
+            return name
+            
+        except Exception as e:
+            # 如果出现任何错误，回退到简单命名
+            self.logger.warning(f"智能命名失败，使用简单命名: {e}")
+            return os.path.basename(file_path)
     
     def batch_add_tasks(self, file_paths: List[str], preset: str = "standard",
                        priority: TaskPriority = TaskPriority.NORMAL) -> List[str]:
@@ -5522,6 +5563,229 @@ class TorrentMakerApp:
             print(f"❌ 初始化失败: {e}")
             sys.exit(1)
 
+    def _check_queue_status_before_operation(self, operation_name: str) -> bool:
+        """在执行操作前检查队列运行状态"""
+        if not self.queue_manager:
+            return True  # 如果没有队列管理器，允许操作
+            
+        if self.queue_manager.is_running():
+            print(f"\n⚠️ 队列正在运行中")
+            print(f"当前正在执行制种任务，建议等待完成后再进行{operation_name}操作。")
+            print("\n选择操作:")
+            print("1. 🔄 继续操作（可能影响队列性能）")
+            print("2. 📊 查看队列状态")
+            print("3. ⏸️ 暂停队列后继续")
+            print("4. 🔙 返回主菜单")
+            
+            while True:
+                choice = input("\n请选择 (1-4): ").strip()
+                if choice == '1':
+                    print(f"\n⚡ 继续执行{operation_name}操作...")
+                    return True
+                elif choice == '2':
+                    self._display_enhanced_queue_status()
+                    continue
+                elif choice == '3':
+                    if self.queue_manager.pause_queue():
+                        print("\n⏸️ 队列已暂停")
+                        return True
+                    else:
+                        print("\n❌ 暂停队列失败")
+                        return False
+                elif choice == '4':
+                    return False
+                else:
+                    print("❌ 无效选择，请重新输入")
+        
+        return True
+
+    def _display_enhanced_queue_status(self):
+        """显示增强的队列状态信息"""
+        if not self.queue_manager:
+            print("❌ 队列管理器不可用")
+            return
+            
+        print("\n" + "=" * 60)
+        print("           📊 队列运行状态")
+        print("=" * 60)
+        
+        # 获取队列状态
+        status = self.queue_manager.get_queue_status()
+        
+        # 显示运行状态
+        if self.queue_manager.is_running():
+            print("🔄 队列状态: 运行中")
+        elif self.queue_manager.is_paused():
+            print("⏸️ 队列状态: 已暂停")
+        else:
+            print("⏹️ 队列状态: 已停止")
+            
+        print(f"📈 并发任务数: {status['running_tasks']}/{self.queue_manager.max_concurrent}")
+        
+        # 显示当前正在处理的任务
+        running_tasks = [task for task in self.queue_manager.get_all_tasks() 
+                        if task.status == TaskStatus.RUNNING]
+        if running_tasks:
+            print(f"\n🔄 正在处理 ({len(running_tasks)} 个任务):")
+            for task in running_tasks:
+                progress_str = ""
+                if hasattr(task, 'progress') and task.progress > 0:
+                    progress_str = f" ({task.progress:.1f}%)"
+                print(f"  • {task.name}{progress_str}")
+        
+        # 显示等待队列
+        waiting_tasks = [task for task in self.queue_manager.get_all_tasks() 
+                        if task.status == TaskStatus.WAITING]
+        if waiting_tasks:
+            print(f"\n⏳ 等待队列 ({len(waiting_tasks)} 个任务):")
+            for i, task in enumerate(waiting_tasks[:5], 1):
+                print(f"  {i}. {task.name}")
+            if len(waiting_tasks) > 5:
+                print(f"     ... 还有 {len(waiting_tasks) - 5} 个任务")
+        
+        # 显示统计信息
+        stats = status['statistics']
+        print(f"\n📊 统计信息:")
+        print(f"  总任务数: {status['total_tasks']}")
+        print(f"  已完成: {stats['completed_tasks']}")
+        print(f"  失败: {stats['failed_tasks']}")
+        print(f"  成功率: {stats['success_rate']:.1f}%")
+        if stats['average_processing_time'] > 0:
+            print(f"  平均处理时间: {stats['average_processing_time']:.1f}秒")
+        
+        print("\n" + "=" * 60)
+
+    def _add_queue_task_interactive(self, queue_manager):
+        """交互式添加队列任务"""
+        print("\n" + "=" * 50)
+        print("           ➕ 添加制种任务")
+        print("=" * 50)
+        
+        # 获取文件路径
+        if self.path_completer:
+            file_path = self.path_completer.get_input("请输入文件或文件夹路径: ")
+        else:
+            file_path = input("请输入文件或文件夹路径: ").strip()
+        
+        if not file_path:
+            print("❌ 路径不能为空")
+            return
+            
+        # 检查路径是否存在
+        if not os.path.exists(file_path):
+            print(f"❌ 路径不存在: {file_path}")
+            return
+        
+        # 选择预设配置
+        print("\n选择预设配置:")
+        presets = ['standard', 'high_quality', 'fast', 'custom']
+        for i, preset in enumerate(presets, 1):
+            print(f"{i}. {preset}")
+        
+        preset_choice = input("\n请选择预设 (1-4, 默认1): ").strip()
+        try:
+            preset_index = int(preset_choice) - 1 if preset_choice else 0
+            if 0 <= preset_index < len(presets):
+                preset = presets[preset_index]
+            else:
+                preset = 'standard'
+        except ValueError:
+            preset = 'standard'
+        
+        # 选择优先级
+        print("\n选择任务优先级:")
+        print("1. 低")
+        print("2. 普通")
+        print("3. 高")
+        
+        priority_choice = input("\n请选择优先级 (1-3, 默认2): ").strip()
+        try:
+            priority_index = int(priority_choice) - 1 if priority_choice else 1
+            priorities = [TaskPriority.LOW, TaskPriority.NORMAL, TaskPriority.HIGH]
+            if 0 <= priority_index < len(priorities):
+                priority = priorities[priority_index]
+            else:
+                priority = TaskPriority.NORMAL
+        except ValueError:
+            priority = TaskPriority.NORMAL
+        
+        # 添加任务
+        try:
+            task_id = queue_manager.add_torrent_task(file_path, preset, priority)
+            print(f"\n✅ 任务已添加到队列")
+            print(f"📋 任务ID: {task_id}")
+            print(f"📁 路径: {file_path}")
+            print(f"⚙️ 预设: {preset}")
+            print(f"🔥 优先级: {priority.value}")
+        except Exception as e:
+            print(f"❌ 添加任务失败: {e}")
+    
+    def _remove_queue_task_interactive(self, queue_manager):
+        """交互式删除队列任务"""
+        print("\n" + "=" * 50)
+        print("           ➖ 删除队列任务")
+        print("=" * 50)
+        
+        # 获取所有任务
+        all_tasks = queue_manager.get_all_tasks()
+        if not all_tasks:
+            print("\n📭 队列为空，没有任务可删除")
+            return
+        
+        # 显示任务列表
+        print("\n📋 当前任务列表:")
+        print("-" * 80)
+        print(f"{'序号':<4} {'任务名称':<30} {'状态':<10} {'优先级':<8}")
+        print("-" * 80)
+        
+        task_list = []
+        for i, task in enumerate(all_tasks, 1):
+            status_icon = {
+                TaskStatus.WAITING: '⏳',
+                TaskStatus.RUNNING: '🔄',
+                TaskStatus.COMPLETED: '✅',
+                TaskStatus.FAILED: '❌',
+                TaskStatus.CANCELLED: '🚫'
+            }.get(task.status, '❓')
+            
+            print(f"{i:<4} {task.name[:29]:<30} {status_icon}{task.status.value:<9} {task.priority.value:<8}")
+            task_list.append(task)
+        
+        print("-" * 80)
+        
+        # 获取用户选择
+        choice = input(f"\n请选择要删除的任务序号 (1-{len(task_list)}, 0取消): ").strip()
+        
+        try:
+            if choice == '0':
+                print("❌ 已取消删除操作")
+                return
+                
+            task_index = int(choice) - 1
+            if 0 <= task_index < len(task_list):
+                selected_task = task_list[task_index]
+                
+                # 确认删除
+                if selected_task.status == TaskStatus.RUNNING:
+                    print(f"\n⚠️ 任务 '{selected_task.name}' 正在运行中")
+                    confirm = input("确认要强制删除正在运行的任务吗? (y/N): ").strip().lower()
+                    if confirm not in ['y', 'yes', '是']:
+                        print("❌ 已取消删除操作")
+                        return
+                
+                # 删除任务
+                if queue_manager.remove_task(selected_task.task_id):
+                    print(f"\n✅ 任务 '{selected_task.name}' 已删除")
+                else:
+                    print(f"\n❌ 删除任务失败")
+            else:
+                print("❌ 无效的任务序号")
+                
+        except ValueError:
+            print("❌ 请输入有效的数字")
+        except Exception as e:
+            print(f"❌ 删除任务时出错: {e}")
+
     def display_header(self):
         """显示程序头部信息"""
         print("🎬" + "=" * 60)
@@ -5557,6 +5821,10 @@ class TorrentMakerApp:
 
     def search_and_create(self):
         """搜索并制作种子"""
+        # 检查队列运行状态
+        if not self._check_queue_status_before_operation("搜索并制种"):
+            return
+            
         while True:
             # 显示搜索建议（如果有增强功能）
             recent_searches = []
@@ -5812,6 +6080,10 @@ class TorrentMakerApp:
 
     def quick_create(self):
         """快速制种"""
+        # 检查队列运行状态
+        if not self._check_queue_status_before_operation("快速制种"):
+            return
+            
         print("\n" + "="*60)
         print("⚡ 快速制种模式")
         print("="*60)
@@ -5866,6 +6138,10 @@ class TorrentMakerApp:
 
     def batch_create(self):
         """统一的批量制种功能"""
+        # 检查队列运行状态
+        if not self._check_queue_status_before_operation("批量制种"):
+            return
+            
         print("\n📦 批量制种")
         print("=" * 50)
         print("选择批量制种方式:")
@@ -6297,10 +6573,12 @@ class TorrentMakerApp:
         print("5. 🗑️ 清理已完成任务")
         print("6. 📊 查看详细统计")
         print("7. 💾 导出队列报告")
+        print("8. ➕ 添加制种任务")
+        print("9. ➖ 删除任务")
         print("0. 🔙 返回主菜单")
         print("=" * 60)
         
-        choice = input("请选择操作 (0-7): ").strip()
+        choice = input("请选择操作 (0-9): ").strip()
         
         try:
             if choice == '0':
@@ -6323,6 +6601,10 @@ class TorrentMakerApp:
                 self._show_detailed_statistics(queue_manager)
             elif choice == '7':
                 self._export_queue_report(queue_manager)
+            elif choice == '8':
+                self._add_queue_task_interactive(queue_manager)
+            elif choice == '9':
+                self._remove_queue_task_interactive(queue_manager)
             else:
                 print("❌ 无效选择")
         

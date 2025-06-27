@@ -211,7 +211,7 @@ class TestIntegration(unittest.TestCase):
             content = f.read()
         self.assertIn('v1.9.12', content)
         # 检查版本常量是否存在
-        self.assertIn('VERSION = "v1.9.12"', content)
+        self.assertIn('VERSION = "v1.9.17"', content)
 
 
 def run_tests():
