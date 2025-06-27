@@ -2,8 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v1.9.8
+Torrent Maker - 单文件版本 v1.9.9
 基于 mktorrent 的高性能半自动化种子制作工具
+
+🎯 v1.9.9 PathCompleter修复版本:
+- 🔧 修复 PathCompleter 缺少 get_input 方法的问题
+- ✅ 添加支持路径补全的用户输入功能
+- 🔄 完善路径历史记录和自动补全机制
+- 📋 确保智能搜索和批量制种功能正常
+- 🚀 提升用户交互体验和操作便捷性
 
 🎯 v1.9.8 增强功能测试修复版本:
 - 🔧 修复增强功能模块测试问题
@@ -101,8 +108,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v1.9.8"
-VERSION_NAME = "增强功能测试修复版"
+VERSION = "v1.9.9"
+VERSION_NAME = "PathCompleter修复版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
@@ -987,6 +994,31 @@ class PathCompleter:
                 }, f, ensure_ascii=False, indent=2)
         except OSError:
             pass
+    
+    def get_input(self, prompt: str) -> str:
+        """获取用户输入，支持路径补全"""
+        try:
+            if readline:
+                # 设置当前补全器
+                old_completer = readline.get_completer()
+                readline.set_completer(self.complete)
+                
+                # 获取用户输入
+                user_input = input(prompt).strip()
+                
+                # 恢复原补全器
+                readline.set_completer(old_completer)
+                
+                # 如果输入的是路径，添加到历史记录
+                if user_input and (os.path.exists(user_input) or os.path.dirname(user_input)):
+                    self.add_to_history(user_input)
+                
+                return user_input
+            else:
+                # 没有 readline 支持时的降级处理
+                return input(prompt).strip()
+        except (EOFError, KeyboardInterrupt):
+            return ""
 
 
 # ================== 进度监控模块 ==================
