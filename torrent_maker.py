@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v2.0.1
+Torrent Maker - 单文件版本 v2.0.2
 基于 mktorrent 的高性能半自动化种子制作工具
 
-🎯 v2.0.1 自动发布流程优化版本:
-- 🤖 新增GitHub Actions自动发布工作流
-- 🔄 版本变更时自动创建Release和标签
+🎯 v2.0.2 批量制种修复版本:
+- 🔧 修复TorrentProgressMonitor缺失start_monitoring方法
+- 🔧 修复TorrentProgressMonitor缺失stop_monitoring方法
+- 📊 增强进度监控功能和状态管理
+- ✅ 解决批量制种失败问题
 - 📦 自动生成发布包和安装说明
 - 🛠️ 增加手动发布备用流程
 - ✨ 优化发布流程的用户体验
@@ -164,8 +166,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v2.0.1"
-VERSION_NAME = "一键安装脚本重构版"
+VERSION = "v2.0.2"
+VERSION_NAME = "批量制种修复版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 # 触发GitHub Actions自动发布 - 2025-06-27
 
@@ -1399,6 +1401,8 @@ class TorrentProgressMonitor:
         self.monitor = ProgressMonitor()
         self.processes: Dict[str, subprocess.Popen] = {}
         self._lock = threading.Lock()
+        self.current_task_id: Optional[str] = None
+        self.is_monitoring = False
     
     def start_torrent_creation(self, task_id: str, command: List[str], 
                               input_path: str, output_path: str) -> bool:
@@ -1562,6 +1566,73 @@ class TorrentProgressMonitor:
             return True
         except Exception as e:
             print(f"⚠️ 完成任务失败: {e}")
+            return False
+    
+    def start_monitoring(self, task_name: str, task_path: str) -> bool:
+        """开始监控制种任务"""
+        try:
+            # 生成任务ID
+            task_id = f"torrent_{int(time.time())}_{task_name}"
+            self.current_task_id = task_id
+            
+            # 创建监控任务
+            file_size = self._get_file_size(task_path)
+            self.monitor.create_task(task_id, metadata={
+                'task_name': task_name,
+                'task_path': task_path,
+                'file_size': file_size,
+                'start_time': time.time()
+            })
+            
+            # 启动任务
+            self.monitor.start_task(task_id)
+            self.is_monitoring = True
+            
+            print(f"📊 开始监控制种任务: {task_name}")
+            return True
+            
+        except Exception as e:
+            print(f"⚠️ 启动监控失败: {e}")
+            return False
+    
+    def stop_monitoring(self) -> bool:
+        """停止监控制种任务"""
+        try:
+            if self.current_task_id and self.is_monitoring:
+                # 完成当前任务
+                self.monitor.complete_task(self.current_task_id, True, "制种任务完成")
+                print(f"📊 停止监控制种任务: {self.current_task_id}")
+                
+                # 重置状态
+                self.current_task_id = None
+                self.is_monitoring = False
+                return True
+            else:
+                print("⚠️ 没有正在监控的任务")
+                return False
+                
+        except Exception as e:
+            print(f"⚠️ 停止监控失败: {e}")
+            return False
+    
+    def update_progress(self, message: str, progress: float = None) -> bool:
+        """更新监控进度"""
+        try:
+            if self.current_task_id and self.is_monitoring:
+                if progress is not None:
+                    self.monitor.update_progress(self.current_task_id, progress, message)
+                else:
+                    # 如果没有提供进度值，基于时间估算
+                    task_info = self.monitor.get_task(self.current_task_id)
+                    if task_info and task_info.metadata.get('start_time'):
+                        elapsed = time.time() - task_info.metadata['start_time']
+                        estimated_progress = min(90, elapsed * 5)  # 简单的时间估算
+                        self.monitor.update_progress(self.current_task_id, estimated_progress, message)
+                return True
+            return False
+            
+        except Exception as e:
+            print(f"⚠️ 更新进度失败: {e}")
             return False
 
 
