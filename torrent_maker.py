@@ -3695,8 +3695,8 @@ class TorrentMakerApp:
             output_folder = self.config.get_output_folder()
 
             self.creator = TorrentCreator(
-                trackers,
-                output_folder,
+                tracker_links=trackers,
+                output_dir=output_folder,
                 max_workers=max_workers
             )
             
