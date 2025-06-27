@@ -2,8 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v1.9.2
+Torrent Maker - 单文件版本 v1.9.8
 基于 mktorrent 的高性能半自动化种子制作工具
+
+🎯 v1.9.8 增强功能测试修复版本:
+- 🔧 修复增强功能模块测试问题
+- ✅ 完善 PathCompleter、TorrentProgressMonitor 功能
+- 🔄 修复 SearchHistory 和 SmartSearchSuggester 兼容性
+- 📋 解决文件权限和方法缺失问题
+- 🚀 确保所有增强功能正常工作
 
 🎯 v1.9.4 队列管理功能修复版本:
 - 🔧 修复队列管理功能不可用问题
@@ -94,8 +101,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v1.9.7"
-VERSION_NAME = "队列管理修复版"
+VERSION = "v1.9.8"
+VERSION_NAME = "增强功能测试修复版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
@@ -955,6 +962,10 @@ class PathCompleter:
         
         return suggestions
     
+    def get_recent_paths(self, limit: int = 10) -> List[str]:
+        """获取最近使用的路径"""
+        return self.path_history[:limit]
+    
     def load_history(self) -> None:
         """加载历史记录"""
         try:
@@ -1351,6 +1362,47 @@ class TorrentProgressMonitor:
     def get_all_tasks(self) -> Dict[str, ProgressInfo]:
         """获取所有任务"""
         return self.monitor.get_all_tasks()
+    
+    def create_task(self, task_id: str, description: str = "", path: str = "", metadata: Dict[str, Any] = None) -> bool:
+        """创建新任务"""
+        try:
+            task_metadata = metadata or {}
+            if description:
+                task_metadata['description'] = description
+            if path:
+                task_metadata['path'] = path
+            self.monitor.create_task(task_id, task_metadata)
+            return True
+        except Exception as e:
+            print(f"⚠️ 创建任务失败: {e}")
+            return False
+    
+    def start_task(self, task_id: str) -> bool:
+        """启动任务"""
+        try:
+            self.monitor.start_task(task_id)
+            return True
+        except Exception as e:
+            print(f"⚠️ 启动任务失败: {e}")
+            return False
+    
+    def update_progress(self, task_id: str, progress: float, current_step: str = "") -> bool:
+        """更新任务进度"""
+        try:
+            self.monitor.update_progress(task_id, progress, current_step)
+            return True
+        except Exception as e:
+            print(f"⚠️ 更新进度失败: {e}")
+            return False
+    
+    def complete_task(self, task_id: str, success: bool, error_message: str = "") -> bool:
+        """完成任务"""
+        try:
+            self.monitor.complete_task(task_id, success, error_message)
+            return True
+        except Exception as e:
+            print(f"⚠️ 完成任务失败: {e}")
+            return False
 
 
 # ================== 搜索历史模块 ==================
@@ -1511,6 +1563,35 @@ class SearchHistory:
         
         return recent_queries
     
+    def get_popular_queries(self, limit: int = 10) -> List[str]:
+        """获取热门搜索"""
+        query_counts = Counter(entry.query for entry in self.entries)
+        popular_queries = [query for query, count in query_counts.most_common(limit)]
+        return popular_queries
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """获取搜索统计信息"""
+        if not self.entries:
+            return {
+                'total_searches': 0,
+                'unique_queries': 0,
+                'success_rate': 0.0,
+                'average_results': 0.0
+            }
+        
+        total_searches = len(self.entries)
+        unique_queries = len(set(entry.query for entry in self.entries))
+        successful_searches = sum(1 for entry in self.entries if entry.success)
+        success_rate = successful_searches / total_searches if total_searches > 0 else 0.0
+        average_results = sum(entry.results_count for entry in self.entries) / total_searches if total_searches > 0 else 0.0
+        
+        return {
+            'total_searches': total_searches,
+            'unique_queries': unique_queries,
+            'success_rate': round(success_rate * 100, 1),
+            'average_results': round(average_results, 1)
+        }
+    
     def load_history(self):
         """加载历史记录"""
         try:
@@ -1581,6 +1662,35 @@ class SmartSearchSuggester:
                     return category
         
         return None
+    
+    def get_related_queries(self, query: str, limit: int = 5) -> List[str]:
+        """获取相关查询建议"""
+        related_queries = []
+        query_lower = query.lower()
+        
+        # 从历史记录中查找相似查询
+        # 兼容两种SearchHistory实现
+        history_data = getattr(self.history, 'entries', None) or getattr(self.history, 'history', [])
+        
+        for entry in history_data:
+            # 兼容不同的数据结构
+            entry_query = entry.query if hasattr(entry, 'query') else entry.get('query', '')
+            entry_query_lower = entry_query.lower()
+            
+            # 检查是否包含相同关键词
+            query_words = set(query_lower.split())
+            entry_words = set(entry_query_lower.split())
+            
+            # 如果有共同词汇且不是完全相同的查询
+            if (query_words & entry_words and 
+                entry_query != query and 
+                entry_query not in related_queries):
+                related_queries.append(entry_query)
+                
+                if len(related_queries) >= limit:
+                    break
+        
+        return related_queries
 
 
 # ================== 性能监控系统 ==================
@@ -5084,6 +5194,11 @@ class SearchHistory:
         )
         return sorted_history[:limit]
 
+    def get_recent_queries(self, limit: int = 10) -> List[str]:
+        """获取最近的搜索查询字符串"""
+        recent_searches = self.get_recent_searches(limit)
+        return [item['query'] for item in recent_searches]
+
     def get_statistics(self) -> Dict[str, Any]:
         """获取搜索历史统计信息"""
         if not self.history:
@@ -5117,6 +5232,19 @@ class SearchHistory:
             'most_searched': most_searched,
             'recent_activity': recent_activity
         }
+
+    def get_popular_queries(self, limit: int = 10) -> List[str]:
+        """获取热门搜索查询"""
+        if not self.history:
+            return []
+        
+        # 按搜索次数排序
+        sorted_history = sorted(
+            self.history,
+            key=lambda x: x.get('count', 0),
+            reverse=True
+        )
+        return [item['query'] for item in sorted_history[:limit]]
 
     def clear_history(self) -> bool:
         """清空搜索历史"""

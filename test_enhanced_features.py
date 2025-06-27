@@ -15,9 +15,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from path_completer import PathCompleter
-    from progress_monitor import TorrentProgressMonitor
-    from search_history import SearchHistory, SmartSearchSuggester
+    from torrent_maker import PathCompleter, TorrentProgressMonitor, SearchHistory, SmartSearchSuggester
     print("✅ 所有增强功能模块导入成功")
 except ImportError as e:
     print(f"❌ 模块导入失败: {e}")
@@ -67,12 +65,11 @@ def test_search_history():
     """测试搜索历史功能"""
     print("\n📝 测试搜索历史功能...")
     try:
-        # 使用临时文件测试
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            temp_file = f.name
+        # 使用临时目录测试
+        temp_dir = os.path.join(os.getcwd(), f'test_history_{os.getpid()}')
         
         try:
-            history = SearchHistory(temp_file)
+            history = SearchHistory(config_dir=temp_dir)
             print("✅ SearchHistory 初始化成功")
             
             # 测试添加搜索记录
@@ -90,9 +87,13 @@ def test_search_history():
             
             return True
         finally:
-            # 清理临时文件
-            if os.path.exists(temp_file):
-                os.unlink(temp_file)
+            # 清理临时目录
+            try:
+                if os.path.exists(temp_dir):
+                    import shutil
+                    shutil.rmtree(temp_dir)
+            except OSError:
+                pass
                 
     except Exception as e:
         print(f"❌ SearchHistory 测试失败: {e}")
@@ -102,12 +103,11 @@ def test_smart_search_suggester():
     """测试智能搜索建议功能"""
     print("\n💡 测试智能搜索建议功能...")
     try:
-        # 使用临时文件测试
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            temp_file = f.name
+        # 使用临时目录测试
+        temp_dir = os.path.join(os.getcwd(), f'test_suggester_{os.getpid()}')
         
         try:
-            history = SearchHistory(temp_file)
+            history = SearchHistory(config_dir=temp_dir)
             suggester = SmartSearchSuggester(history)
             print("✅ SmartSearchSuggester 初始化成功")
             
@@ -122,9 +122,13 @@ def test_smart_search_suggester():
             
             return True
         finally:
-            # 清理临时文件
-            if os.path.exists(temp_file):
-                os.unlink(temp_file)
+            # 清理临时目录
+            try:
+                if os.path.exists(temp_dir):
+                    import shutil
+                    shutil.rmtree(temp_dir)
+            except OSError:
+                pass
                 
     except Exception as e:
         print(f"❌ SmartSearchSuggester 测试失败: {e}")
