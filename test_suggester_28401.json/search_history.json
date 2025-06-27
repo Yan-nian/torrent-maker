@@ -1,0 +1,37 @@
+{
+  "history": [
+    {
+      "query": "复仇者联盟",
+      "timestamp": "2025-06-27T13:02:05.172074",
+      "results_count": 5,
+      "count": 1,
+      "last_results_count": 5,
+      "resource_folder": 0.3
+    },
+    {
+      "query": "钢铁侠",
+      "timestamp": "2025-06-27T13:02:05.172435",
+      "results_count": 5,
+      "count": 1,
+      "last_results_count": 5,
+      "resource_folder": 0.3
+    },
+    {
+      "query": "蜘蛛侠",
+      "timestamp": "2025-06-27T13:02:05.172587",
+      "results_count": 5,
+      "count": 1,
+      "last_results_count": 5,
+      "resource_folder": 0.3
+    },
+    {
+      "query": "美国队长",
+      "timestamp": "2025-06-27T13:02:05.172854",
+      "results_count": 5,
+      "count": 1,
+      "last_results_count": 5,
+      "resource_folder": 0.3
+    }
+  ],
+  "last_updated": "2025-06-27T13:02:05.172875"
+}

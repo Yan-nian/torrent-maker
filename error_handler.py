@@ -469,3 +469,39 @@ def handle_with_retry(func, *args, max_retries: int = 3, **kwargs) -> Tuple[bool
     """便捷的重试处理函数"""
     handler = get_error_handler()
     return handler.handle_error_with_retry(func, *args, max_retries=max_retries, **kwargs)
+
+
+# 添加缺失的错误处理方法
+def _handle_permission_error(error_details: Dict[str, Any]) -> ErrorInfo:
+    """处理权限错误"""
+    return ErrorInfo(
+        error_type=ErrorType.PERMISSION,
+        severity=ErrorSeverity.HIGH,
+        message="权限不足，无法访问文件或目录",
+        original_error=str(error_details.get('error', '')),
+        file_path=error_details.get('file_path'),
+        suggested_solutions=[
+            "使用管理员权限运行程序",
+            "检查文件和目录的权限设置",
+            "确保当前用户有读写权限"
+        ],
+        auto_recoverable=False
+    )
+
+
+def _handle_disk_space_error(error_details: Dict[str, Any]) -> ErrorInfo:
+    """处理磁盘空间不足错误"""
+    return ErrorInfo(
+        error_type=ErrorType.DISK_SPACE,
+        severity=ErrorSeverity.CRITICAL,
+        message="磁盘空间不足，无法完成操作",
+        original_error=str(error_details.get('error', '')),
+        file_path=error_details.get('file_path'),
+        suggested_solutions=[
+            "清理磁盘空间",
+            "删除不必要的文件",
+            "选择其他磁盘位置",
+            "检查可用磁盘空间"
+        ],
+        auto_recoverable=False
+    )

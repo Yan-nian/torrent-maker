@@ -14,9 +14,11 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from path_completer import PathCompleter
-    from progress_monitor import TorrentProgressMonitor
-    from search_history import SearchHistory, SmartSearchSuggester
+    # 这些功能已集成到主程序中
+    # from path_completer import PathCompleter
+    # from progress_monitor import TorrentProgressMonitor
+    # from search_history import SearchHistory, SmartSearchSuggester
+    pass
 except ImportError as e:
     print(f"❌ 模块导入失败: {e}")
     sys.exit(1)
@@ -27,7 +29,9 @@ def demo_path_completer():
     print("🔍 路径补全功能演示")
     print("=" * 60)
     
-    completer = PathCompleter()
+    # completer = PathCompleter()  # 功能已集成到主程序
+    print("📝 路径补全功能已集成到主程序中")
+    return
     
     # 添加一些示例路径
     demo_paths = [
@@ -74,7 +78,9 @@ def demo_progress_monitor():
     print("📊 进度监控功能演示")
     print("=" * 60)
     
-    monitor = TorrentProgressMonitor()
+    # monitor = TorrentProgressMonitor()  # 功能已集成到主程序
+    print("📝 进度监控功能已集成到主程序中")
+    return
     
     # 创建演示任务
     task_id = "demo_task_1"
@@ -129,14 +135,10 @@ def demo_search_history():
     print("📝 搜索历史功能演示")
     print("=" * 60)
     
-    # 使用临时文件
-    import tempfile
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        temp_file = f.name
-    
-    try:
-        history = SearchHistory(temp_file)
-        suggester = SmartSearchSuggester(history)
+    # history = SearchHistory(temp_file)  # 功能已集成到主程序
+    # suggester = SmartSearchSuggester(history)  # 功能已集成到主程序
+    print("📝 搜索历史功能已集成到主程序中")
+    return
         
         # 添加演示数据
         demo_searches = [

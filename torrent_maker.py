@@ -115,8 +115,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v1.9.10"
-VERSION_NAME = "搜索历史兼容性修复版"
+VERSION = "v1.9.11"
+VERSION_NAME = "预设模式管理修复版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
@@ -5302,6 +5302,7 @@ class TorrentMakerApp:
 
     def __init__(self):
         self.config = ConfigManager()
+        self.config_manager = self.config  # 为了兼容性添加别名
         self.matcher = None
         self.creator = None
         self.queue_manager = None  # 队列管理器
@@ -5907,8 +5908,8 @@ class TorrentMakerApp:
     def _execute_batch_with_queue(self, selected_results: list, preset: str):
         """使用队列管理执行批量制种"""
         try:
-            # 导入队列管理器
-            from queue_manager import TorrentQueueManager, TaskPriority
+            # 使用内部定义的队列管理器
+            # TorrentQueueManager 和 TaskPriority 已在文件中定义
             
             # 初始化队列管理器
             max_concurrent = self.config.get_setting('max_concurrent_operations', 4) if hasattr(self.config, 'get_setting') else 4
@@ -6182,7 +6183,7 @@ class TorrentMakerApp:
             return
         
         # 按状态分组显示
-        from queue_manager import TaskStatus
+        # TaskStatus 已在文件中定义
         
         status_groups = {
             TaskStatus.WAITING: "⏳ 等待中",

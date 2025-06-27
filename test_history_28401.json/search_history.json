@@ -1,0 +1,29 @@
+{
+  "history": [
+    {
+      "query": "测试电影1",
+      "timestamp": "2025-06-27T13:02:05.171170",
+      "results_count": 1,
+      "count": 1,
+      "last_results_count": 1,
+      "resource_folder": 0.5
+    },
+    {
+      "query": "测试剧集2",
+      "timestamp": "2025-06-27T13:02:05.171317",
+      "results_count": 2,
+      "count": 1,
+      "last_results_count": 2,
+      "resource_folder": 0.5
+    },
+    {
+      "query": "测试动漫3",
+      "timestamp": "2025-06-27T13:02:05.171438",
+      "results_count": 3,
+      "count": 1,
+      "last_results_count": 3,
+      "resource_folder": 0.5
+    }
+  ],
+  "last_updated": "2025-06-27T13:02:05.171440"
+}
