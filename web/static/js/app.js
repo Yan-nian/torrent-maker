@@ -656,6 +656,8 @@ class TorrentMakerApp {
         document.getElementById('current-path').value = '/';
         document.getElementById('selected-path').textContent = '无';
         document.getElementById('confirm-selection').disabled = true;
+        this.selectedFilePath = null;
+        this.selectedFileRow = null;
         this.clearFileList();
         this.hideDirectoryStats();
         
@@ -714,11 +716,21 @@ class TorrentMakerApp {
             } else {
                 this.showNotification(browseData.error || '浏览目录失败', 'error');
                 this.clearFileList();
+                // 清除选择状态
+                this.selectedFilePath = null;
+                this.selectedFileRow = null;
+                document.getElementById('selected-path').textContent = '无';
+                document.getElementById('confirm-selection').disabled = true;
             }
         } catch (error) {
             console.error('浏览目录失败:', error);
             this.showNotification('浏览目录失败', 'error');
             this.clearFileList();
+            // 清除选择状态
+            this.selectedFilePath = null;
+            this.selectedFileRow = null;
+            document.getElementById('selected-path').textContent = '无';
+            document.getElementById('confirm-selection').disabled = true;
         } finally {
             this.showLoading(false);
         }
@@ -804,29 +816,38 @@ class TorrentMakerApp {
                 <td>${episodeInfo}</td>
             `;
             
-            // 点击事件
-            row.addEventListener('click', () => {
-                if (file.is_directory) {
-                    // 进入子目录
-                    this.browsePath(file.full_path, serverId);
-                } else {
-                    // 选择文件
-                    this.selectFile(file.full_path, row);
+            // 点击事件 - 统一处理选择
+            row.addEventListener('click', (e) => {
+                // 防止双击时触发单击
+                if (e.detail === 1) {
+                    setTimeout(() => {
+                        if (e.detail === 1) {
+                            this.selectFile(file.full_path, row, file.is_directory);
+                        }
+                    }, 200);
                 }
             });
             
-            // 双击事件（文件夹）
+            // 双击事件（文件夹）- 进入目录
             if (file.is_directory) {
-                row.addEventListener('dblclick', () => {
+                row.addEventListener('dblclick', (e) => {
+                    e.preventDefault();
                     this.browsePath(file.full_path, serverId);
                 });
             }
             
             tbody.appendChild(row);
+            
+            // 恢复之前的选择状态
+            if (this.selectedFilePath && file.full_path === this.selectedFilePath) {
+                row.classList.add('table-active');
+                document.getElementById('selected-path').textContent = this.selectedFilePath;
+                document.getElementById('confirm-selection').disabled = false;
+            }
         });
     }
     
-    selectFile(path, row) {
+    selectFile(path, row, isDirectory = false) {
         // 清除之前的选择
         document.querySelectorAll('.file-row').forEach(r => {
             r.classList.remove('table-active');
@@ -835,9 +856,18 @@ class TorrentMakerApp {
         // 选中当前行
         row.classList.add('table-active');
         
-        // 更新选择状态
+        // 保存选择状态
+        this.selectedFilePath = path;
+        this.selectedFileRow = row;
+        
+        // 更新选择状态显示
         document.getElementById('selected-path').textContent = path;
         document.getElementById('confirm-selection').disabled = false;
+        
+        // 如果是文件夹，显示提示
+        if (isDirectory) {
+            this.showNotification('已选择文件夹，双击可进入目录', 'info');
+        }
     }
     
     confirmPathSelection() {

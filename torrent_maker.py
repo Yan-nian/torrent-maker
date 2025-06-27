@@ -176,8 +176,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v2.2.0"
-VERSION_NAME = "远程文件浏览器版"
+VERSION = "v2.2.1"
+VERSION_NAME = "文件浏览器修复版"
 FULL_VERSION_INFO = f"Torrent Maker {VERSION} - {VERSION_NAME}"
 # 触发GitHub Actions自动发布 - 2025-06-27
 
