@@ -86,30 +86,761 @@ from typing import List, Dict, Any, Tuple, Optional, Union, Set
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 
-# 导入新的功能模块
-try:
-    from path_completer import PathCompleter
-    from progress_monitor import TorrentProgressMonitor
-    from search_history import SearchHistory, SmartSearchSuggester
-    ENHANCED_FEATURES_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ 增强功能模块导入失败: {e}")
-    print("💡 将使用基础功能运行")
-    ENHANCED_FEATURES_AVAILABLE = False
+# 所有功能已内置到单文件中
+ENHANCED_FEATURES_AVAILABLE = True
 
 # 配置日志
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "1.9.4"
-VERSION_NAME = "队列管理功能修复版"
+VERSION = "1.9.5"
+VERSION_NAME = "单文件架构恢复版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
+# ================== 路径补全模块 ==================
+import glob
+try:
+    import readline
+except ImportError:
+    readline = None
+
+class PathCompleter:
+    """路径自动补全类 - 为 Torrent Maker 提供 Tab 键补全功能"""
+    
+    def __init__(self, history_file: str = None):
+        self.history_file = history_file or os.path.expanduser("~/.torrent_maker_path_history.json")
+        self.path_history: List[str] = []
+        self.load_history()
+        
+        # 设置 readline 补全
+        if readline:
+            readline.set_completer(self.complete)
+            readline.parse_and_bind("tab: complete")
+            readline.set_completer_delims(' \t\n`!@#$%^&*()=+[{]}\\|;:\'\",<>?')
+    
+    def complete(self, text: str, state: int) -> Optional[str]:
+        """Tab 补全回调函数"""
+        if state == 0:
+            self.matches = self._get_matches(text)
+        
+        try:
+            return self.matches[state]
+        except IndexError:
+            return None
+    
+    def _get_matches(self, text: str) -> List[str]:
+        """获取匹配的路径"""
+        matches = []
+        
+        # 如果文本为空，返回历史记录
+        if not text.strip():
+            return self.path_history[-10:]  # 最近10个
+        
+        # 展开用户目录
+        expanded_text = os.path.expanduser(text)
+        
+        # 获取目录和文件名部分
+        if os.path.isdir(expanded_text):
+            search_dir = expanded_text
+            prefix = ""
+        else:
+            search_dir = os.path.dirname(expanded_text) or "."
+            prefix = os.path.basename(expanded_text)
+        
+        try:
+            # 使用 glob 进行匹配
+            pattern = os.path.join(search_dir, prefix + "*")
+            glob_matches = glob.glob(pattern)
+            
+            for match in sorted(glob_matches):
+                # 如果是目录，添加斜杠
+                if os.path.isdir(match):
+                    match += os.sep
+                matches.append(match)
+            
+            # 添加历史记录中的匹配项
+            for hist_path in self.path_history:
+                if hist_path.startswith(text) and hist_path not in matches:
+                    matches.append(hist_path)
+        
+        except (OSError, PermissionError):
+            pass
+        
+        return matches[:20]  # 限制返回数量
+    
+    def add_to_history(self, path: str) -> None:
+        """添加路径到历史记录"""
+        if not path or not os.path.exists(path):
+            return
+        
+        # 规范化路径
+        normalized_path = os.path.abspath(path)
+        
+        # 移除重复项
+        if normalized_path in self.path_history:
+            self.path_history.remove(normalized_path)
+        
+        # 添加到开头
+        self.path_history.insert(0, normalized_path)
+        
+        # 限制历史记录大小
+        if len(self.path_history) > 100:
+            self.path_history = self.path_history[:100]
+        
+        self.save_history()
+    
+    def get_suggestions(self, partial_path: str, limit: int = 10) -> List[str]:
+        """获取路径建议"""
+        suggestions = []
+        
+        # 从历史记录中查找
+        for path in self.path_history:
+            if partial_path.lower() in path.lower():
+                suggestions.append(path)
+                if len(suggestions) >= limit:
+                    break
+        
+        return suggestions
+    
+    def load_history(self) -> None:
+        """加载历史记录"""
+        try:
+            if os.path.exists(self.history_file):
+                with open(self.history_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self.path_history = data.get('paths', [])
+        except (json.JSONDecodeError, OSError):
+            self.path_history = []
+    
+    def save_history(self) -> None:
+        """保存历史记录"""
+        try:
+            os.makedirs(os.path.dirname(self.history_file), exist_ok=True)
+            with open(self.history_file, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'paths': self.path_history,
+                    'last_updated': datetime.now().isoformat()
+                }, f, ensure_ascii=False, indent=2)
+        except OSError:
+            pass
 
 
+# ================== 进度监控模块 ==================
+from enum import Enum
+from dataclasses import dataclass
+from collections import defaultdict
 
+class TaskStatus(Enum):
+    """任务状态枚举"""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    PAUSED = "paused"
+
+@dataclass
+class ProgressInfo:
+    """进度信息数据类"""
+    task_id: str
+    status: TaskStatus
+    progress: float = 0.0  # 0-100
+    current_step: str = ""
+    total_steps: int = 0
+    completed_steps: int = 0
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    error_message: str = ""
+    metadata: Dict[str, Any] = None
+    
+    def __post_init__(self):
+        if self.metadata is None:
+            self.metadata = {}
+
+class ProgressDisplay:
+    """进度条显示类"""
+    
+    def __init__(self, width: int = 50):
+        self.width = width
+        self.last_output_length = 0
+    
+    def show_progress(self, progress: float, message: str = "", show_percentage: bool = True) -> None:
+        """显示进度条"""
+        # 确保进度在 0-100 范围内
+        progress = max(0, min(100, progress))
+        
+        # 计算进度条
+        filled_width = int(self.width * progress / 100)
+        bar = "█" * filled_width + "░" * (self.width - filled_width)
+        
+        # 构建输出字符串
+        if show_percentage:
+            output = f"\r[{bar}] {progress:6.2f}%"
+        else:
+            output = f"\r[{bar}]"
+        
+        if message:
+            output += f" {message}"
+        
+        # 清除之前的输出
+        if len(output) < self.last_output_length:
+            output += " " * (self.last_output_length - len(output))
+        
+        print(output, end="", flush=True)
+        self.last_output_length = len(output)
+    
+    def clear(self) -> None:
+        """清除进度条"""
+        if self.last_output_length > 0:
+            print("\r" + " " * self.last_output_length + "\r", end="", flush=True)
+            self.last_output_length = 0
+    
+    def finish(self, message: str = "完成!") -> None:
+        """完成进度显示"""
+        self.show_progress(100, message)
+        print()  # 换行
+        self.last_output_length = 0
+
+class ProgressMonitor:
+    """进度监控器"""
+    
+    def __init__(self):
+        self.tasks: Dict[str, ProgressInfo] = {}
+        self.callbacks: Dict[str, List[callable]] = defaultdict(list)
+        self.display = ProgressDisplay()
+        self._lock = threading.Lock()
+        self._running = False
+        self._display_thread = None
+    
+    def create_task(self, task_id: str, total_steps: int = 0, metadata: Dict[str, Any] = None) -> ProgressInfo:
+        """创建新任务"""
+        with self._lock:
+            task = ProgressInfo(
+                task_id=task_id,
+                status=TaskStatus.PENDING,
+                total_steps=total_steps,
+                start_time=datetime.now(),
+                metadata=metadata or {}
+            )
+            self.tasks[task_id] = task
+            return task
+    
+    def start_task(self, task_id: str) -> bool:
+        """开始任务"""
+        with self._lock:
+            if task_id not in self.tasks:
+                return False
+            
+            task = self.tasks[task_id]
+            task.status = TaskStatus.RUNNING
+            task.start_time = datetime.now()
+            
+            self._notify_callbacks(task_id, "started")
+            return True
+    
+    def update_progress(self, task_id: str, progress: float = None, 
+                       current_step: str = None, completed_steps: int = None) -> bool:
+        """更新任务进度"""
+        with self._lock:
+            if task_id not in self.tasks:
+                return False
+            
+            task = self.tasks[task_id]
+            
+            if progress is not None:
+                task.progress = max(0, min(100, progress))
+            
+            if current_step is not None:
+                task.current_step = current_step
+            
+            if completed_steps is not None:
+                task.completed_steps = completed_steps
+                if task.total_steps > 0:
+                    task.progress = (completed_steps / task.total_steps) * 100
+            
+            self._notify_callbacks(task_id, "progress")
+            return True
+    
+    def complete_task(self, task_id: str, success: bool = True, error_message: str = "") -> bool:
+        """完成任务"""
+        with self._lock:
+            if task_id not in self.tasks:
+                return False
+            
+            task = self.tasks[task_id]
+            task.status = TaskStatus.COMPLETED if success else TaskStatus.FAILED
+            task.end_time = datetime.now()
+            task.progress = 100 if success else task.progress
+            
+            if error_message:
+                task.error_message = error_message
+            
+            self._notify_callbacks(task_id, "completed" if success else "failed")
+            return True
+    
+    def cancel_task(self, task_id: str) -> bool:
+        """取消任务"""
+        with self._lock:
+            if task_id not in self.tasks:
+                return False
+            
+            task = self.tasks[task_id]
+            task.status = TaskStatus.CANCELLED
+            task.end_time = datetime.now()
+            
+            self._notify_callbacks(task_id, "cancelled")
+            return True
+    
+    def get_task(self, task_id: str) -> Optional[ProgressInfo]:
+        """获取任务信息"""
+        with self._lock:
+            return self.tasks.get(task_id)
+    
+    def get_all_tasks(self) -> Dict[str, ProgressInfo]:
+        """获取所有任务"""
+        with self._lock:
+            return self.tasks.copy()
+    
+    def add_callback(self, task_id: str, callback: callable) -> None:
+        """添加回调函数"""
+        self.callbacks[task_id].append(callback)
+    
+    def _notify_callbacks(self, task_id: str, event: str) -> None:
+        """通知回调函数"""
+        for callback in self.callbacks.get(task_id, []):
+            try:
+                callback(task_id, event, self.tasks[task_id])
+            except Exception as e:
+                print(f"⚠️ 回调函数执行失败: {e}")
+    
+    def start_display_loop(self, task_id: str, update_interval: float = 0.1) -> None:
+        """开始显示循环"""
+        if self._running:
+            return
+        
+        self._running = True
+        self._display_thread = threading.Thread(
+            target=self._display_loop,
+            args=(task_id, update_interval),
+            daemon=True
+        )
+        self._display_thread.start()
+    
+    def stop_display_loop(self) -> None:
+        """停止显示循环"""
+        self._running = False
+        if self._display_thread:
+            self._display_thread.join(timeout=1.0)
+    
+    def _display_loop(self, task_id: str, update_interval: float) -> None:
+        """显示循环"""
+        while self._running:
+            with self._lock:
+                task = self.tasks.get(task_id)
+                if not task or task.status in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
+                    break
+                
+                message = task.current_step if task.current_step else f"任务: {task_id}"
+                self.display.show_progress(task.progress, message)
+            
+            time.sleep(update_interval)
+        
+        # 清除显示
+        self.display.clear()
+    
+    def clear_completed_tasks(self) -> int:
+        """清除已完成的任务"""
+        with self._lock:
+            completed_statuses = {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED}
+            to_remove = [task_id for task_id, task in self.tasks.items() 
+                        if task.status in completed_statuses]
+            
+            for task_id in to_remove:
+                del self.tasks[task_id]
+                if task_id in self.callbacks:
+                    del self.callbacks[task_id]
+            
+            return len(to_remove)
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """获取统计信息"""
+        with self._lock:
+            stats = {
+                'total_tasks': len(self.tasks),
+                'pending': 0,
+                'running': 0,
+                'completed': 0,
+                'failed': 0,
+                'cancelled': 0
+            }
+            
+            for task in self.tasks.values():
+                stats[task.status.value] += 1
+            
+            return stats
+
+class TorrentProgressMonitor:
+    """Torrent 制种进度监控器"""
+    
+    def __init__(self):
+        self.monitor = ProgressMonitor()
+        self.processes: Dict[str, subprocess.Popen] = {}
+        self._lock = threading.Lock()
+    
+    def start_torrent_creation(self, task_id: str, command: List[str], 
+                              input_path: str, output_path: str) -> bool:
+        """开始制种任务"""
+        try:
+            # 创建任务
+            file_size = self._get_file_size(input_path)
+            self.monitor.create_task(task_id, metadata={
+                'input_path': input_path,
+                'output_path': output_path,
+                'file_size': file_size,
+                'command': command
+            })
+            
+            # 启动进程
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
+            
+            with self._lock:
+                self.processes[task_id] = process
+            
+            # 开始监控
+            self.monitor.start_task(task_id)
+            
+            # 启动监控线程
+            monitor_thread = threading.Thread(
+                target=self._monitor_process,
+                args=(task_id, process),
+                daemon=True
+            )
+            monitor_thread.start()
+            
+            return True
+            
+        except Exception as e:
+            self.monitor.complete_task(task_id, False, str(e))
+            return False
+    
+    def _monitor_process(self, task_id: str, process: subprocess.Popen) -> None:
+        """监控进程执行"""
+        try:
+            # 模拟进度更新（mktorrent 没有实时进度输出）
+            start_time = time.time()
+            
+            while process.poll() is None:
+                elapsed = time.time() - start_time
+                # 基于时间估算进度（这是一个简化的实现）
+                estimated_progress = min(90, elapsed * 10)  # 假设90%的进度基于时间
+                
+                self.monitor.update_progress(task_id, estimated_progress, "正在创建种子文件...")
+                time.sleep(0.5)
+            
+            # 进程结束
+            return_code = process.returncode
+            
+            if return_code == 0:
+                self.monitor.update_progress(task_id, 100, "种子文件创建完成")
+                self.monitor.complete_task(task_id, True)
+            else:
+                stderr_output = process.stderr.read() if process.stderr else ""
+                self.monitor.complete_task(task_id, False, f"进程退出码: {return_code}, 错误: {stderr_output}")
+            
+        except Exception as e:
+            self.monitor.complete_task(task_id, False, str(e))
+        finally:
+            with self._lock:
+                if task_id in self.processes:
+                    del self.processes[task_id]
+    
+    def cancel_torrent_creation(self, task_id: str) -> bool:
+        """取消制种任务"""
+        with self._lock:
+            process = self.processes.get(task_id)
+            if process:
+                try:
+                    process.terminate()
+                    # 等待进程结束
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                    
+                    self.monitor.cancel_task(task_id)
+                    del self.processes[task_id]
+                    return True
+                except Exception as e:
+                    print(f"⚠️ 取消任务失败: {e}")
+                    return False
+        
+        return False
+    
+    def _get_file_size(self, path: str) -> int:
+        """获取文件或目录大小"""
+        try:
+            if os.path.isfile(path):
+                return os.path.getsize(path)
+            elif os.path.isdir(path):
+                total_size = 0
+                for dirpath, dirnames, filenames in os.walk(path):
+                    for filename in filenames:
+                        filepath = os.path.join(dirpath, filename)
+                        try:
+                            total_size += os.path.getsize(filepath)
+                        except (OSError, IOError):
+                            continue
+                return total_size
+        except (OSError, IOError):
+            pass
+        return 0
+    
+    def get_task_info(self, task_id: str) -> Optional[ProgressInfo]:
+        """获取任务信息"""
+        return self.monitor.get_task(task_id)
+    
+    def get_all_tasks(self) -> Dict[str, ProgressInfo]:
+        """获取所有任务"""
+        return self.monitor.get_all_tasks()
+
+
+# ================== 搜索历史模块 ==================
+from collections import Counter
+import difflib
+
+@dataclass
+class SearchEntry:
+    """搜索记录条目"""
+    query: str
+    timestamp: datetime
+    results_count: int = 0
+    selected_results: List[str] = None
+    success: bool = True
+    search_time: float = 0.0
+    category: str = ""
+    metadata: Dict[str, Any] = None
+    
+    def __post_init__(self):
+        if self.selected_results is None:
+            self.selected_results = []
+        if self.metadata is None:
+            self.metadata = {}
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典"""
+        return {
+            'query': self.query,
+            'timestamp': self.timestamp.isoformat(),
+            'results_count': self.results_count,
+            'selected_results': self.selected_results,
+            'success': self.success,
+            'search_time': self.search_time,
+            'category': self.category,
+            'metadata': self.metadata
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'SearchEntry':
+        """从字典创建"""
+        return cls(
+            query=data['query'],
+            timestamp=datetime.fromisoformat(data['timestamp']),
+            results_count=data.get('results_count', 0),
+            selected_results=data.get('selected_results', []),
+            success=data.get('success', True),
+            search_time=data.get('search_time', 0.0),
+            category=data.get('category', ''),
+            metadata=data.get('metadata', {})
+        )
+
+class SearchHistory:
+    """搜索历史管理器"""
+    
+    def __init__(self, history_file: str = None, max_entries: int = 1000):
+        self.history_file = history_file or os.path.expanduser("~/.torrent_maker_search_history.json")
+        self.max_entries = max_entries
+        self.entries: List[SearchEntry] = []
+        self.load_history()
+    
+    def add_search(self, query: str, results_count: int = 0, 
+                   selected_results: List[str] = None, success: bool = True,
+                   search_time: float = 0.0, category: str = "",
+                   **metadata) -> SearchEntry:
+        """添加搜索记录"""
+        cleaned_query = self._clean_query(query)
+        if not cleaned_query:
+            return None
+        
+        # 检查重复搜索
+        from datetime import timedelta
+        recent_cutoff = datetime.now() - timedelta(minutes=5)
+        for entry in reversed(self.entries):
+            if (entry.timestamp > recent_cutoff and 
+                entry.query.lower() == cleaned_query.lower()):
+                # 更新现有记录
+                entry.results_count = max(entry.results_count, results_count)
+                if selected_results:
+                    entry.selected_results.extend(selected_results)
+                    entry.selected_results = list(set(entry.selected_results))
+                entry.success = entry.success and success
+                entry.search_time = (entry.search_time + search_time) / 2
+                if category:
+                    entry.category = category
+                entry.metadata.update(metadata)
+                self.save_history()
+                return entry
+        
+        # 创建新记录
+        entry = SearchEntry(
+            query=cleaned_query,
+            timestamp=datetime.now(),
+            results_count=results_count,
+            selected_results=selected_results or [],
+            success=success,
+            search_time=search_time,
+            category=category,
+            metadata=metadata
+        )
+        
+        self.entries.append(entry)
+        
+        # 限制历史记录大小
+        if len(self.entries) > self.max_entries:
+            self.entries = self.entries[-self.max_entries:]
+        
+        self.save_history()
+        return entry
+    
+    def _clean_query(self, query: str) -> str:
+        """清理查询字符串"""
+        if not query:
+            return ""
+        
+        cleaned = re.sub(r'\s+', ' ', query.strip())
+        cleaned = re.sub(r'[^\w\s\u4e00-\u9fff.\-_()\[\]]+', '', cleaned)
+        return cleaned
+    
+    def get_suggestions(self, partial_query: str, limit: int = 10) -> List[Tuple[str, float]]:
+        """获取搜索建议"""
+        if not partial_query.strip():
+            recent_queries = [entry.query for entry in reversed(self.entries[-limit:])]
+            return [(query, 1.0) for query in recent_queries]
+        
+        partial_lower = partial_query.lower().strip()
+        suggestions = []
+        
+        all_queries = [entry.query for entry in self.entries]
+        
+        for query in set(all_queries):
+            query_lower = query.lower()
+            
+            if query_lower.startswith(partial_lower):
+                suggestions.append((query, 1.0))
+            elif partial_lower in query_lower:
+                suggestions.append((query, 0.8))
+            else:
+                similarity = difflib.SequenceMatcher(None, partial_lower, query_lower).ratio()
+                if similarity > 0.6:
+                    suggestions.append((query, similarity))
+        
+        query_counts = Counter(all_queries)
+        suggestions.sort(key=lambda x: (x[1], query_counts[x[0]]), reverse=True)
+        
+        return suggestions[:limit]
+    
+    def get_recent_queries(self, limit: int = 10) -> List[str]:
+        """获取最近搜索"""
+        recent_queries = []
+        seen = set()
+        
+        for entry in reversed(self.entries):
+            if entry.query not in seen:
+                recent_queries.append(entry.query)
+                seen.add(entry.query)
+                if len(recent_queries) >= limit:
+                    break
+        
+        return recent_queries
+    
+    def load_history(self):
+        """加载历史记录"""
+        try:
+            if os.path.exists(self.history_file):
+                with open(self.history_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    entries_data = data.get('entries', data)
+                    self.entries = [SearchEntry.from_dict(entry_data) for entry_data in entries_data]
+        except (json.JSONDecodeError, OSError, KeyError) as e:
+            print(f"⚠️ 加载搜索历史失败: {e}")
+            self.entries = []
+    
+    def save_history(self):
+        """保存历史记录"""
+        try:
+            os.makedirs(os.path.dirname(self.history_file), exist_ok=True)
+            
+            data = {
+                'version': '1.0',
+                'last_updated': datetime.now().isoformat(),
+                'total_entries': len(self.entries),
+                'entries': [entry.to_dict() for entry in self.entries]
+            }
+            
+            with open(self.history_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except OSError as e:
+            print(f"⚠️ 保存搜索历史失败: {e}")
+
+class SmartSearchSuggester:
+    """智能搜索建议器"""
+    
+    def __init__(self, search_history: SearchHistory):
+        self.history = search_history
+        self.patterns = {
+            '电影': [r'\d{4}', r'(电影|movie|film)', r'(HD|4K|1080p|720p|BluRay|BDRip)', r'(中字|字幕|subtitle)'],
+            '电视剧': [r'(第\d+季|S\d+|season)', r'(第\d+集|E\d+|episode)', r'(电视剧|TV|series)', r'(全集|完整版|complete)'],
+            '动漫': [r'(动漫|anime|动画)', r'(第\d+话|第\d+集)', r'(OVA|OAD|剧场版)', r'(日语|中配|双语)'],
+            '纪录片': [r'(纪录片|documentary)', r'(BBC|National Geographic|Discovery)', r'(自然|历史|科学)']
+        }
+    
+    def suggest_improvements(self, query: str) -> List[str]:
+        """建议查询改进"""
+        suggestions = []
+        
+        detected_category = self._detect_category(query)
+        if detected_category:
+            suggestions.append(f"检测到类型: {detected_category}")
+        
+        if not re.search(r'\d{4}', query) and detected_category in ['电影', '电视剧']:
+            suggestions.append("建议添加年份以获得更精确的结果")
+        
+        if not re.search(r'(HD|4K|1080p|720p|BluRay)', query, re.IGNORECASE):
+            suggestions.append("可以添加画质信息 (如: 1080p, 4K)")
+        
+        if not re.search(r'(中字|字幕|subtitle)', query, re.IGNORECASE):
+            suggestions.append("可以添加字幕信息 (如: 中字)")
+        
+        return suggestions
+    
+    def _detect_category(self, query: str) -> Optional[str]:
+        """检测查询分类"""
+        query_lower = query.lower()
+        
+        for category, patterns in self.patterns.items():
+            for pattern in patterns:
+                if re.search(pattern, query_lower):
+                    return category
+        
+        return None
 
 
 # ================== 性能监控系统 ==================
