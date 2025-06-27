@@ -142,8 +142,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v1.9.17"
-VERSION_NAME = "队列功能优化版"
+VERSION = "v1.9.18"
+VERSION_NAME = "队列功能优化版(Bug修复)"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
