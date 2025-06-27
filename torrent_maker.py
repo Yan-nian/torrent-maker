@@ -166,8 +166,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v2.0.6"
-VERSION_NAME = "队列批量删除功能版"
+VERSION = "v2.0.7"
+VERSION_NAME = "批量删除功能修复版"
 FULL_VERSION_INFO = f"Torrent Maker {VERSION} - {VERSION_NAME}"
 # 触发GitHub Actions自动发布 - 2025-06-27
 
@@ -536,7 +536,7 @@ class QueueManager:
             try:
                 task = self.priority_queue.get_nowait()
                 # 只有在tasks字典中存在的任务才重新加入队列
-                if task.task_id in self.tasks:
+                if task.id in self.tasks:
                     new_queue.put(task)
             except queue.Empty:
                 break
@@ -6132,7 +6132,7 @@ class TorrentMakerApp:
             print(f"[{i}/{len(task_indices)}] 删除: {task.name[:40]}...", end=" ")
             
             try:
-                if queue_manager.remove_task(task.task_id):
+                if queue_manager.remove_task(task.id):
                     print("✅")
                     success_count += 1
                 else:
