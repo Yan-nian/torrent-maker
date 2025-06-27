@@ -5,6 +5,13 @@
 Torrent Maker - 单文件版本 v1.9.10
 基于 mktorrent 的高性能半自动化种子制作工具
 
+🎯 v1.9.13 搜索历史快捷键增强版本:
+- ✨ 新增搜索历史快捷键选择功能（输入数字1-5直接选择历史搜索）
+- 🔍 优化搜索界面提示信息，支持快捷键和手动输入双模式
+- 🎯 增强用户体验，快速重复搜索更加便捷
+- 📋 兼容现有搜索历史数据结构，无缝升级
+- 🚀 提升搜索效率和操作便捷性
+
 🎯 v1.9.10 搜索历史兼容性修复版本:
 - 🔧 修复搜索历史显示中的 'str' object has no attribute 'query' 错误
 - ✅ 增强搜索历史数据结构兼容性处理
@@ -115,8 +122,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v1.9.12"
-VERSION_NAME = "版本信息优化版"
+VERSION = "v1.9.13"
+VERSION_NAME = "搜索历史快捷键增强版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
@@ -5498,6 +5505,7 @@ class TorrentMakerApp:
         """搜索并制作种子"""
         while True:
             # 显示搜索建议（如果有增强功能）
+            recent_searches = []
             if self.search_history:
                 recent_searches = self.search_history.get_recent_queries(5)
                 if recent_searches:
@@ -5513,14 +5521,36 @@ class TorrentMakerApp:
                             print(f"  {i}. {search}")
                     print()
             
-            # 获取用户输入（支持路径补全）
-            if self.path_completer:
-                search_name = self.path_completer.get_input("🔍 请输入要搜索的影视剧名称 (回车返回主菜单): ")
+            # 获取用户输入（支持路径补全和快捷键选择）
+            if recent_searches:
+                prompt = "🔍 请输入要搜索的影视剧名称 (输入数字1-5选择历史搜索，回车返回主菜单): "
             else:
-                search_name = input("🔍 请输入要搜索的影视剧名称 (回车返回主菜单): ").strip()
+                prompt = "🔍 请输入要搜索的影视剧名称 (回车返回主菜单): "
+            
+            if self.path_completer:
+                search_name = self.path_completer.get_input(prompt)
+            else:
+                search_name = input(prompt).strip()
                 
             if not search_name:
                 break
+            
+            # 检查是否是快捷键选择（数字1-5）
+            if search_name.isdigit() and recent_searches:
+                choice_num = int(search_name)
+                if 1 <= choice_num <= len(recent_searches):
+                    selected_search = recent_searches[choice_num - 1]
+                    # 兼容不同的数据结构
+                    if isinstance(selected_search, str):
+                        search_name = selected_search
+                    elif hasattr(selected_search, 'query'):
+                        search_name = selected_search.query
+                    else:
+                        search_name = str(selected_search)
+                    print(f"\n✨ 已选择历史搜索: {search_name}")
+                else:
+                    print(f"❌ 无效选择，请输入1-{len(recent_searches)}之间的数字")
+                    continue
 
             print(f"\n🔄 正在搜索 '{search_name}'...")
             start_time = time.time()
