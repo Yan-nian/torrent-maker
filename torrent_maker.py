@@ -578,6 +578,14 @@ class QueueManager:
             for _ in range(self.max_concurrent - len(self.running_tasks)):
                 self._try_start_next_task()
     
+    def is_running(self) -> bool:
+        """检查队列是否正在运行"""
+        return self._running
+    
+    def is_paused(self) -> bool:
+        """检查队列是否已暂停"""
+        return self._paused
+    
     def _try_start_next_task(self) -> bool:
         """尝试启动下一个任务"""
         if not self._running or self._paused:
