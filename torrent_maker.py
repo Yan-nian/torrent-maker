@@ -166,9 +166,9 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "2.0.5"
+VERSION = "v2.0.5"
 VERSION_NAME = "搜索队列流程优化版"
-FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
+FULL_VERSION_INFO = f"Torrent Maker {VERSION} - {VERSION_NAME}"
 # 触发GitHub Actions自动发布 - 2025-06-27
 
 
