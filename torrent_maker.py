@@ -2,8 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v1.9.9
+Torrent Maker - 单文件版本 v1.9.10
 基于 mktorrent 的高性能半自动化种子制作工具
+
+🎯 v1.9.10 搜索历史兼容性修复版本:
+- 🔧 修复搜索历史显示中的 'str' object has no attribute 'query' 错误
+- ✅ 增强搜索历史数据结构兼容性处理
+- 🔄 修复主菜单和搜索历史管理中的显示问题
+- 📋 确保不同 SearchHistory 实现的兼容性
+- 🚀 提升程序稳定性和用户体验
 
 🎯 v1.9.9 PathCompleter修复版本:
 - 🔧 修复 PathCompleter 缺少 get_input 方法的问题
@@ -108,8 +115,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v1.9.9"
-VERSION_NAME = "PathCompleter修复版"
+VERSION = "v1.9.10"
+VERSION_NAME = "搜索历史兼容性修复版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
@@ -5419,7 +5426,14 @@ class TorrentMakerApp:
                 if recent_searches:
                     print("\n📝 最近搜索:")
                     for i, search in enumerate(recent_searches, 1):
-                        print(f"  {i}. {search.query} (结果: {search.result_count})")
+                        # 兼容不同的数据结构
+                        if isinstance(search, str):
+                            print(f"  {i}. {search}")
+                        elif hasattr(search, 'query'):
+                            result_count = getattr(search, 'result_count', 0)
+                            print(f"  {i}. {search.query} (结果: {result_count})")
+                        else:
+                            print(f"  {i}. {search}")
                     print()
             
             # 获取用户输入（支持路径补全）
@@ -6941,7 +6955,20 @@ class TorrentMakerApp:
     
     def _show_search_history(self):
         """显示搜索历史"""
-        recent_searches = self.search_history.get_recent_queries(20)
+        # 尝试获取详细搜索记录，如果失败则使用简单查询列表
+        try:
+            recent_searches = self.search_history.get_recent_searches(20)
+        except AttributeError:
+            # 如果没有 get_recent_searches 方法，使用 get_recent_queries
+            recent_queries = self.search_history.get_recent_queries(20)
+            if not recent_queries:
+                print("\n📝 暂无搜索历史")
+                return
+            print("\n📋 最近搜索历史:")
+            for i, query in enumerate(recent_queries, 1):
+                print(f"  {i}. {query}")
+            return
+            
         if not recent_searches:
             print("\n📝 暂无搜索历史")
             return
@@ -6952,9 +6979,29 @@ class TorrentMakerApp:
         print("-" * 80)
         
         for i, search in enumerate(recent_searches, 1):
-            timestamp = search.timestamp.strftime('%m-%d %H:%M')
-            duration = f"{search.duration:.3f}s" if search.duration else "N/A"
-            print(f"{i:<4} {search.query[:28]:<30} {search.result_count:<8} {timestamp:<12} {duration:<8}")
+            # 兼容不同的数据结构
+            if isinstance(search, dict):
+                query = search.get('query', 'N/A')
+                result_count = search.get('result_count', 0)
+                timestamp = search.get('timestamp', 'N/A')
+                duration = search.get('duration', 'N/A')
+                if isinstance(timestamp, str):
+                    timestamp_str = timestamp[:16] if len(timestamp) > 16 else timestamp
+                else:
+                    timestamp_str = timestamp.strftime('%m-%d %H:%M') if hasattr(timestamp, 'strftime') else 'N/A'
+                duration_str = f"{duration:.3f}s" if isinstance(duration, (int, float)) else "N/A"
+            elif hasattr(search, 'query'):
+                query = search.query
+                result_count = getattr(search, 'result_count', 0)
+                timestamp_str = search.timestamp.strftime('%m-%d %H:%M') if hasattr(search, 'timestamp') else 'N/A'
+                duration_str = f"{search.duration:.3f}s" if hasattr(search, 'duration') and search.duration else "N/A"
+            else:
+                query = str(search)
+                result_count = 0
+                timestamp_str = 'N/A'
+                duration_str = 'N/A'
+                
+            print(f"{i:<4} {query[:28]:<30} {result_count:<8} {timestamp_str:<12} {duration_str:<8}")
     
     def _show_popular_searches(self):
         """显示热门搜索"""
