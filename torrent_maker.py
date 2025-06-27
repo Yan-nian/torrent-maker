@@ -2,8 +2,22 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v1.9.10
+Torrent Maker - 单文件版本 v1.9.20
 基于 mktorrent 的高性能半自动化种子制作工具
+
+🎯 v1.9.20 统一安装脚本版本:
+- 🔧 合并多个安装脚本为统一的install.sh
+- ✨ 新增模式选择功能（basic/stable/enterprise）
+- 🚀 支持动态版本获取和智能安装流程
+- 📋 增强安装历史记录和错误处理
+- 🛡️ 提升安装脚本的兼容性和可靠性
+
+🎯 v1.9.19 制种命名修复版本:
+- 🔧 修复队列制种时文件命名错误问题（从-root_pack_时间戳修复为正确的文件夹名_时间戳）
+- ✅ 修正TorrentQueueManager中create_torrent参数传递错误
+- 🔄 正确设置TorrentCreator输出目录，确保文件保存到指定位置
+- 📋 优化队列任务执行逻辑，提升制种文件命名准确性
+- 🚀 确保批量制种和队列管理功能的文件命名正确性
 
 🎯 v1.9.16 队列管理类型错误修复版本:
 - 🔧 修复队列管理中字符串与整数比较的类型错误
@@ -142,8 +156,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v1.9.18"
-VERSION_NAME = "队列功能优化版(Bug修复)"
+VERSION = "v1.9.19"
+VERSION_NAME = "制种命名修复版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
@@ -880,10 +894,14 @@ class TorrentQueueManager(QueueManager):
             # 设置输出路径
             output_path = task.output_path or self.torrent_creator.config_manager.get_output_folder()
             
+            # 更新TorrentCreator的输出目录
+            from pathlib import Path
+            self.torrent_creator.output_dir = Path(output_path)
+            
             # 执行制种
             success = self.torrent_creator.create_torrent(
                 task.path,
-                output_path,
+                custom_name=None,  # 使用默认命名（基于文件夹名）
                 progress_callback=lambda p: self._update_task_progress(task, p)
             )
             
