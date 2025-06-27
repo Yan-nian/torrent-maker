@@ -166,8 +166,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v2.0.5"
-VERSION_NAME = "搜索队列流程优化版"
+VERSION = "v2.0.6"
+VERSION_NAME = "队列批量删除功能版"
 FULL_VERSION_INFO = f"Torrent Maker {VERSION} - {VERSION_NAME}"
 # 触发GitHub Actions自动发布 - 2025-06-27
 
@@ -5949,8 +5949,117 @@ class TorrentMakerApp:
         except Exception as e:
             print(f"❌ 添加任务失败: {e}")
     
+    def _parse_task_selection(self, input_str: str, max_index: int) -> tuple[list[int], str]:
+        """解析任务选择输入
+        
+        Args:
+            input_str: 用户输入字符串
+            max_index: 最大任务索引
+            
+        Returns:
+            tuple: (索引列表, 错误信息)
+        """
+        input_str = input_str.strip().lower()
+        
+        # 处理特殊命令
+        if input_str in ['0', 'cancel', '取消']:
+            return [], "cancelled"
+        if input_str in ['all', '*', '全部']:
+            return list(range(max_index)), ""
+            
+        try:
+            indices = set()
+            
+            # 分割逗号分隔的部分
+            parts = [part.strip() for part in input_str.split(',')]
+            
+            for part in parts:
+                if '-' in part:
+                    # 处理范围 (如 1-5)
+                    range_parts = part.split('-')
+                    if len(range_parts) != 2 or not range_parts[0] or not range_parts[1]:
+                        return [], f"无效的范围格式: {part}"
+                    
+                    try:
+                        start = int(range_parts[0]) - 1  # 转换为0基索引
+                        end = int(range_parts[1]) - 1
+                    except ValueError:
+                        return [], f"无效的范围格式: {part}"
+                    
+                    if start > end:
+                        return [], f"范围起始值不能大于结束值: {part}"
+                    if start < 0 or end >= max_index:
+                        return [], f"范围超出有效索引 (1-{max_index}): {part}"
+                        
+                    indices.update(range(start, end + 1))
+                else:
+                    # 处理单个数字
+                    index = int(part) - 1  # 转换为0基索引
+                    if index < 0 or index >= max_index:
+                        return [], f"索引超出范围 (1-{max_index}): {part}"
+                    indices.add(index)
+                    
+            return sorted(list(indices)), ""
+            
+        except ValueError:
+            return [], "请输入有效的数字、范围或逗号分隔的组合"
+        except Exception as e:
+            return [], f"解析输入时出错: {e}"
+    
+    def _confirm_batch_deletion(self, tasks_to_delete: list, task_list: list) -> bool:
+        """确认批量删除操作
+        
+        Args:
+            tasks_to_delete: 要删除的任务索引列表
+            task_list: 完整任务列表
+            
+        Returns:
+            bool: 用户是否确认删除
+        """
+        if len(tasks_to_delete) == 1:
+            # 单个任务删除
+            task = task_list[tasks_to_delete[0]]
+            if task.status == TaskStatus.RUNNING:
+                print(f"\n⚠️ 任务 '{task.name}' 正在运行中")
+                confirm = input("确认要强制删除正在运行的任务吗? (y/N): ").strip().lower()
+                return confirm in ['y', 'yes', '是']
+            else:
+                confirm = input(f"\n确认删除任务 '{task.name}'? (y/N): ").strip().lower()
+                return confirm in ['y', 'yes', '是']
+        else:
+            # 批量删除确认
+            print(f"\n📋 将要删除 {len(tasks_to_delete)} 个任务:")
+            print("-" * 60)
+            
+            running_count = 0
+            for i, task_index in enumerate(tasks_to_delete[:10], 1):  # 最多显示10个
+                task = task_list[task_index]
+                status_icon = {
+                    TaskStatus.WAITING: '⏳',
+                    TaskStatus.RUNNING: '🔄',
+                    TaskStatus.COMPLETED: '✅',
+                    TaskStatus.FAILED: '❌',
+                    TaskStatus.CANCELLED: '🚫'
+                }.get(task.status, '❓')
+                
+                if task.status == TaskStatus.RUNNING:
+                    running_count += 1
+                    
+                print(f"{i:2d}. {task.name[:40]:<40} {status_icon}{task.status.value}")
+                
+            if len(tasks_to_delete) > 10:
+                print(f"    ... 还有 {len(tasks_to_delete) - 10} 个任务")
+                
+            print("-" * 60)
+            
+            if running_count > 0:
+                print(f"⚠️ 警告: 其中 {running_count} 个任务正在运行中，删除将强制停止")
+                
+            confirm = input(f"\n确认批量删除这 {len(tasks_to_delete)} 个任务? (y/N): ").strip().lower()
+            return confirm in ['y', 'yes', '是']
+
     def _remove_queue_task_interactive(self, queue_manager):
-        """交互式删除队列任务"""
+        """交互式删除队列任务（支持批量删除）"""
         print("\n" + "=" * 50)
         print("           ➖ 删除队列任务")
         print("=" * 50)
@@ -5982,38 +6091,63 @@ class TorrentMakerApp:
         
         print("-" * 80)
         
-        # 获取用户选择
-        choice = input(f"\n请选择要删除的任务序号 (1-{len(task_list)}, 0取消): ").strip()
+        # 显示输入提示
+        print("\n💡 支持的输入格式:")
+        print("   单个: 5          删除第5个任务")
+        print("   范围: 1-12       删除第1到12个任务")
+        print("   列表: 1,3,5      删除第1、3、5个任务")
+        print("   混合: 1-3,5,8-10 删除第1-3、5、8-10个任务")
+        print("   全部: all 或 *   删除所有任务")
+        print("   取消: 0 或 cancel")
         
-        try:
-            if choice == '0':
-                print("❌ 已取消删除操作")
-                return
-                
-            task_index = int(choice) - 1
-            if 0 <= task_index < len(task_list):
-                selected_task = task_list[task_index]
-                
-                # 确认删除
-                if selected_task.status == TaskStatus.RUNNING:
-                    print(f"\n⚠️ 任务 '{selected_task.name}' 正在运行中")
-                    confirm = input("确认要强制删除正在运行的任务吗? (y/N): ").strip().lower()
-                    if confirm not in ['y', 'yes', '是']:
-                        print("❌ 已取消删除操作")
-                        return
-                
-                # 删除任务
-                if queue_manager.remove_task(selected_task.task_id):
-                    print(f"\n✅ 任务 '{selected_task.name}' 已删除")
+        # 获取用户选择
+        choice = input(f"\n请选择要删除的任务 (支持上述格式): ").strip()
+        
+        # 解析用户输入
+        task_indices, error_msg = self._parse_task_selection(choice, len(task_list))
+        
+        if error_msg == "cancelled":
+            print("❌ 已取消删除操作")
+            return
+        elif error_msg:
+            print(f"❌ {error_msg}")
+            return
+        elif not task_indices:
+            print("❌ 没有选择任何任务")
+            return
+            
+        # 确认删除
+        if not self._confirm_batch_deletion(task_indices, task_list):
+            print("❌ 已取消删除操作")
+            return
+            
+        # 执行批量删除
+        success_count = 0
+        failed_count = 0
+        
+        print(f"\n🔄 开始删除 {len(task_indices)} 个任务...")
+        
+        for i, task_index in enumerate(task_indices, 1):
+            task = task_list[task_index]
+            print(f"[{i}/{len(task_indices)}] 删除: {task.name[:40]}...", end=" ")
+            
+            try:
+                if queue_manager.remove_task(task.task_id):
+                    print("✅")
+                    success_count += 1
                 else:
-                    print(f"\n❌ 删除任务失败")
-            else:
-                print("❌ 无效的任务序号")
+                    print("❌")
+                    failed_count += 1
+            except Exception as e:
+                print(f"❌ ({e})")
+                failed_count += 1
                 
-        except ValueError:
-            print("❌ 请输入有效的数字")
-        except Exception as e:
-            print(f"❌ 删除任务时出错: {e}")
+        # 显示删除结果统计
+        print(f"\n📊 删除完成:")
+        print(f"   ✅ 成功: {success_count} 个")
+        if failed_count > 0:
+            print(f"   ❌ 失败: {failed_count} 个")
+        print(f"   📋 总计: {len(task_indices)} 个")
 
     def display_header(self):
         """显示程序头部信息"""
