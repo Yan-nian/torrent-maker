@@ -5,6 +5,13 @@
 Torrent Maker - 单文件版本 v1.9.10
 基于 mktorrent 的高性能半自动化种子制作工具
 
+🎯 v1.9.15 制种失败问题修复版本:
+- 🔧 修复tracker URL格式错误（移除反引号等非法字符）
+- ✅ 改进时间戳精度到微秒级，解决文件名冲突问题
+- 🔄 添加文件冲突检测和重试机制
+- 📋 增强URL格式验证，提升制种成功率
+- 🚀 提升制种系统的稳定性和可靠性
+
 🎯 v1.9.14 队列管理修复版本:
 - 🔧 修复队列详情显示为空的问题
 - ✅ 修正队列文件保存路径不一致导致的数据丢失
@@ -129,7 +136,7 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v1.9.14"
+VERSION = "v1.9.15"
 VERSION_NAME = "搜索历史快捷键增强版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
@@ -2350,7 +2357,13 @@ class ConfigManager:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith('#'):
-                        trackers.append(line)
+                        # 清理URL格式，移除可能的反引号和其他非法字符
+                        cleaned_line = line.strip('`"\'')
+                        # 基本URL格式验证
+                        if cleaned_line.startswith(('http://', 'https://', 'udp://')):
+                            trackers.append(cleaned_line)
+                        else:
+                            print(f"⚠️  跳过无效的tracker URL: {line}")
                 return trackers if trackers else self.DEFAULT_TRACKERS.copy()
         except FileNotFoundError:
             return self.DEFAULT_TRACKERS.copy()
@@ -4794,8 +4807,16 @@ class TorrentCreator:
             else:
                 torrent_name = self._sanitize_filename(source_path.name)
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # 使用微秒级时间戳确保文件名唯一性
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             output_file = self.output_dir / f"{torrent_name}_{timestamp}.torrent"
+            
+            # 文件冲突检测和重试机制
+            retry_count = 0
+            while output_file.exists() and retry_count < 5:
+                retry_count += 1
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                output_file = self.output_dir / f"{torrent_name}_{timestamp}_retry{retry_count}.torrent"
 
             # 计算文件大小和piece大小
             if self.piece_size == "auto":
@@ -6186,7 +6207,7 @@ class TorrentMakerApp:
                 report_data['tasks'].append(task_data)
             
             # 保存报告
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             report_file = f"queue_report_{timestamp}.json"
             
             with open(report_file, 'w', encoding='utf-8') as f:
