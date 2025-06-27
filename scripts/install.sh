@@ -104,7 +104,8 @@ get_latest_version() {
     
     # 优先从本地文件获取版本
     if [[ -f "./torrent_maker.py" ]]; then
-        version=$(grep -E '^🎯\s*v[0-9]+\.[0-9]+\.[0-9]+' "./torrent_maker.py" | sed -E 's/.*v([0-9]+\.[0-9]+\.[0-9]+).*/\1/' | head -1 2>/dev/null || echo "")
+        # 从VERSION变量获取版本号
+        version=$(grep -E '^VERSION\s*=\s*"v[0-9]+\.[0-9]+\.[0-9]+"' "./torrent_maker.py" | sed -E 's/.*"v([0-9]+\.[0-9]+\.[0-9]+)".*/\1/' | head -1 2>/dev/null || echo "")
     fi
     
     # 如果本地没有找到版本，尝试从 GitHub API 获取
