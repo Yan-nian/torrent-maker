@@ -166,8 +166,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "2.0.3"
-VERSION_NAME = "队列启动信息优化版"
+VERSION = "2.0.4"
+VERSION_NAME = "搜索功能修复版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 # 触发GitHub Actions自动发布 - 2025-06-27
 
@@ -2037,6 +2037,23 @@ class SmartSearchSuggester:
                     break
         
         return related_queries
+    
+    def get_search_suggestions(self, query: str) -> List[str]:
+        """获取搜索建议（整合改进建议和相关查询）"""
+        suggestions = []
+        
+        # 添加查询改进建议
+        improvements = self.suggest_improvements(query)
+        suggestions.extend(improvements)
+        
+        # 添加相关查询建议
+        related = self.get_related_queries(query, limit=3)
+        if related:
+            suggestions.append("相关搜索历史:")
+            for related_query in related:
+                suggestions.append(f"  → {related_query}")
+        
+        return suggestions
 
 
 # ================== 性能监控系统 ==================
