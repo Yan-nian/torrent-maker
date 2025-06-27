@@ -2,15 +2,16 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v1.9.20
+Torrent Maker - 单文件版本 v2.0.0
 基于 mktorrent 的高性能半自动化种子制作工具
 
-🎯 v1.9.20 统一安装脚本版本:
-- 🔧 合并多个安装脚本为统一的install.sh
-- ✨ 新增模式选择功能（basic/stable/enterprise）
-- 🚀 支持动态版本获取和智能安装流程
-- 📋 增强安装历史记录和错误处理
-- 🛡️ 提升安装脚本的兼容性和可靠性
+🎯 v2.0.0 一键安装脚本重构版本:
+- 🔧 完全重构安装脚本，从1186行简化为150行标准版
+- ✨ 统一安装流程：检查mktorrent、安装依赖、安装最新程序
+- 🚀 支持macOS、Ubuntu、Debian、CentOS、RHEL多平台
+- 📋 增强错误处理和用户友好的彩色输出
+- 🛡️ 提升安装脚本的稳定性和维护性
+- ⚡ 优化版本检测逻辑，支持本地和远程版本获取
 
 🎯 v1.9.19 制种命名修复版本:
 - 🔧 修复队列制种时文件命名错误问题（从-root_pack_时间戳修复为正确的文件夹名_时间戳）
@@ -156,8 +157,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v1.9.19"
-VERSION_NAME = "制种命名修复版"
+VERSION = "v2.0.0"
+VERSION_NAME = "一键安装脚本重构版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
