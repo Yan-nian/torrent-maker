@@ -5,6 +5,13 @@
 Torrent Maker - 单文件版本 v1.9.2
 基于 mktorrent 的高性能半自动化种子制作工具
 
+🎯 v1.9.4 队列管理功能修复版本:
+- 🔧 修复队列管理功能不可用问题
+- ✅ 修复 TorrentCreator 与 ConfigManager 集成
+- 🔄 恢复队列管理系统完整功能
+- 📋 修复任务状态跟踪和进度监控
+- 🚀 确保批量制种和队列控制正常工作
+
 🎯 v1.9.2 队列管理与预设优化版本:
 - 🔄 队列管理系统（任务队列、进度监控、批量控制）
 - ⚡ 预设模式管理（内置预设、自定义预设、自动检测）
@@ -95,8 +102,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "1.9.3"
-VERSION_NAME = "队列管理与预设优化版"
+VERSION = "1.9.4"
+VERSION_NAME = "队列管理功能修复版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
@@ -2711,13 +2718,14 @@ class TorrentCreator:
 
     def __init__(self, tracker_links: List[str], output_dir: str = "output",
                  piece_size: Union[str, int] = "auto", private: bool = False,
-                 comment: str = None, max_workers: int = 4):
+                 comment: str = None, max_workers: int = 4, config_manager=None):
         self.tracker_links = list(tracker_links) if tracker_links else []
         self.output_dir = Path(output_dir)
         self.piece_size = piece_size
         self.private = private
         self.comment = comment or self.DEFAULT_COMMENT
         self.max_workers = max_workers
+        self.config_manager = config_manager
 
         # 初始化性能监控和内存管理
         self.performance_monitor = PerformanceMonitor()
@@ -3697,7 +3705,8 @@ class TorrentMakerApp:
             self.creator = TorrentCreator(
                 tracker_links=trackers,
                 output_dir=output_folder,
-                max_workers=max_workers
+                max_workers=max_workers,
+                config_manager=self.config
             )
             
             # 初始化队列管理器
