@@ -2,8 +2,18 @@
 # -*- coding: utf-8 -*-
 
 """
-Torrent Maker - 单文件版本 v2.0.2
+Torrent Maker - 单文件版本 v2.1.0
 基于 mktorrent 的高性能半自动化种子制作工具
+
+🌐 v2.1.0 Web界面增强版本:
+- 🌐 全新Web界面：基于Flask + WebSocket的现代化界面
+- 🖥️ 多服务器SSH连接：支持远程服务器制种管理
+- 📊 实时进度监控：WebSocket推送制种进度和系统状态
+- 🎯 任务队列管理：可视化任务队列和批量操作
+- 📱 移动端适配：响应式设计支持手机平板访问
+- 🔐 安全连接：SSH密钥和密码认证支持
+- 🚀 启动脚本：一键启动Web界面和依赖检查
+- 📋 配置管理：YAML格式的服务器配置文件
 
 🎯 v2.0.2 批量制种修复版本:
 - 🔧 修复TorrentProgressMonitor缺失start_monitoring方法
@@ -166,8 +176,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v2.0.7"
-VERSION_NAME = "批量删除功能修复版"
+VERSION = "v2.2.0"
+VERSION_NAME = "远程文件浏览器版"
 FULL_VERSION_INFO = f"Torrent Maker {VERSION} - {VERSION_NAME}"
 # 触发GitHub Actions自动发布 - 2025-06-27
 

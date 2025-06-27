@@ -1,20 +1,30 @@
-# 🎬 Torrent Maker v1.9.0 - 性能监控增强版
+# 🎬 Torrent Maker v2.1.0 - Web界面增强版
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.7+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)
 
-**真正的单文件种子制作工具 - 下载即用，无需配置**
+**现代化Web界面 + 多服务器SSH连接 + 实时进度监控**
 **基于 `mktorrent` 的高性能半自动化种子制作工具**
 
-[快速开始](#-快速开始) • [功能特性](#-功能特性) • [安装方式](#-安装方式) • [使用说明](#-使用说明)
+[快速开始](#-快速开始) • [Web界面](#-web界面) • [功能特性](#-功能特性) • [安装方式](#-安装方式) • [使用说明](#-使用说明)
 
 </div>
 
 ---
+
+## 🌐 v2.1.0 Web界面增强版本
+
+### 🚀 v2.1.0 全新Web界面
+- **🌐 现代化Web界面**: 基于Flask + WebSocket的响应式Web界面
+- **🖥️ 多服务器管理**: 支持通过SSH连接多台服务器进行远程制种
+- **📊 实时进度监控**: WebSocket实时推送制种进度和系统状态
+- **🎯 任务队列管理**: 可视化任务队列，支持批量操作和优先级设置
+- **📱 移动端适配**: 响应式设计，支持手机和平板访问
+- **🔐 安全连接**: 支持SSH密钥和密码认证，安全可靠
 
 ## 🎯 v2.0.0 一键安装脚本重构版本
 
@@ -62,7 +72,20 @@
 
 ## 🎯 快速开始
 
-### 方式一：一键下载运行（推荐）
+### 🌐 Web界面模式（推荐）
+
+```bash
+# 克隆项目
+git clone https://github.com/Yan-nian/torrent-maker.git
+cd torrent-maker
+
+# 启动Web界面
+python3 start_web.py
+
+# 访问 http://localhost:5000
+```
+
+### 📱 命令行模式
 
 ```bash
 # 下载单文件版本
@@ -217,6 +240,90 @@ sudo yum install mktorrent  # 或 sudo dnf install mktorrent
 sudo pacman -S mktorrent
 ```
 </details>
+
+---
+
+## 🌐 Web界面
+
+### 🚀 启动Web界面
+
+```bash
+# 方式一：使用启动脚本（推荐）
+python3 start_web.py
+
+# 方式二：直接启动
+python3 web_app.py
+
+# 访问地址
+http://localhost:5000
+```
+
+### 🎯 Web界面功能
+
+#### 📊 仪表板
+- **系统监控**: 实时显示CPU、内存、磁盘使用情况
+- **任务统计**: 显示当前任务数量和完成状态
+- **服务器状态**: 监控所有SSH连接的服务器状态
+
+#### 🔧 创建种子
+- **本地制种**: 在本地服务器创建种子文件
+- **远程制种**: 选择SSH服务器进行远程制种
+- **实时进度**: WebSocket实时推送制种进度
+- **批量操作**: 支持多文件夹批量制种
+
+#### 🖥️ 服务器管理
+- **添加服务器**: 配置SSH连接信息
+- **连接测试**: 验证SSH连接状态
+- **命令执行**: 在远程服务器执行命令
+- **文件传输**: 支持文件上传下载
+
+#### 📋 任务管理
+- **任务队列**: 查看所有制种任务状态
+- **进度监控**: 实时显示任务进度
+- **任务控制**: 支持暂停、取消、重试操作
+- **历史记录**: 查看历史任务记录
+
+### 🔐 SSH服务器配置
+
+编辑 `web/servers.yaml` 文件添加服务器：
+
+```yaml
+server1:
+  name: "生产服务器"
+  host: "192.168.1.100"
+  port: 22
+  username: "admin"
+  password: "your_password"  # 或使用密钥文件
+  description: "主要的种子制作服务器"
+
+server2:
+  name: "备用服务器"
+  host: "backup.example.com"
+  port: 2222
+  username: "torrent"
+  key_file: "~/.ssh/id_rsa"
+  description: "备用种子制作服务器"
+```
+
+### 📱 移动端支持
+
+- **响应式设计**: 自适应手机和平板屏幕
+- **触控优化**: 针对触屏设备优化的交互
+- **离线缓存**: 支持离线查看任务状态
+
+### 🛠️ 依赖要求
+
+```bash
+# 安装Web界面依赖
+pip install -r requirements.txt
+
+# 启动Redis服务（用于任务队列）
+# macOS
+brew services start redis
+
+# Linux
+sudo systemctl start redis
+```
 
 ---
 
