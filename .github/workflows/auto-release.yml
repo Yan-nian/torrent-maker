@@ -6,6 +6,16 @@ on:
     branches: [ main ]
     paths:
       - 'torrent_maker.py'
+  workflow_dispatch:  # 添加手动触发选项
+    inputs:
+      force_release:
+        description: '强制发布（即使版本已存在）'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 # 设置权限
 permissions:
@@ -40,12 +50,18 @@ jobs:
         
         echo "📋 检测到版本: v$VERSION"
         
-        # 检查标签是否已存在
-        if git tag | grep -q "^v$VERSION$"; then
-          echo "⚠️ 版本 v$VERSION 已存在，跳过发布"
+        # 检查标签是否已存在和强制发布选项
+        FORCE_RELEASE="${{ github.event.inputs.force_release || 'false' }}"
+        
+        if git tag | grep -q "^v$VERSION$" && [ "$FORCE_RELEASE" != "true" ]; then
+          echo "⚠️ 版本 v$VERSION 已存在，跳过发布（使用 force_release=true 可强制发布）"
           echo "should_release=false" >> $GITHUB_OUTPUT
         else
-          echo "✅ 新版本 v$VERSION，准备发布"
+          if [ "$FORCE_RELEASE" = "true" ]; then
+            echo "🔄 强制发布模式：v$VERSION"
+          else
+            echo "✅ 新版本 v$VERSION，准备发布"
+          fi
           echo "should_release=true" >> $GITHUB_OUTPUT
         fi
         
