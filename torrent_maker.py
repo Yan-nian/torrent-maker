@@ -115,8 +115,8 @@ logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 # ================== 版本信息 ==================
-VERSION = "v1.9.11"
-VERSION_NAME = "预设模式管理修复版"
+VERSION = "v1.9.12"
+VERSION_NAME = "版本信息优化版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
 
 
@@ -2204,6 +2204,11 @@ class ConfigManager:
                 self._create_default_settings()
             if not os.path.exists(self.trackers_path):
                 self._create_default_trackers()
+            
+            # 确保预设配置文件存在
+            presets_path = os.path.join(self.config_dir, "presets.json")
+            if not os.path.exists(presets_path):
+                self._create_default_presets()
         except OSError as e:
             raise ConfigValidationError(f"无法创建配置文件: {e}")
 
@@ -2221,6 +2226,92 @@ class ConfigManager:
             f.write("# 每行一个 tracker URL，以 # 开头的行为注释\n\n")
             for tracker in self.DEFAULT_TRACKERS:
                 f.write(f"{tracker}\n")
+    
+    def _create_default_presets(self) -> None:
+        """创建默认预设配置文件"""
+        presets_path = os.path.join(self.config_dir, "presets.json")
+        
+        # 尝试从项目config目录复制预设文件
+        project_presets_path = os.path.join(os.path.dirname(__file__), "config", "presets.json")
+        
+        if os.path.exists(project_presets_path):
+            try:
+                import shutil
+                shutil.copy2(project_presets_path, presets_path)
+                return
+            except Exception:
+                pass
+        
+        # 如果复制失败，创建基本的预设配置
+        default_presets = {
+            "presets": {
+                "fast": {
+                    "name": "快速模式",
+                    "description": "适用于小文件(<1GB)，优先制种速度",
+                    "settings": {
+                        "piece_size": "256k",
+                        "max_concurrent_operations": "auto_x2",
+                        "cache_enabled": False,
+                        "cache_size_mb": 64,
+                        "max_scan_depth": 3,
+                        "file_search_tolerance": 0.7,
+                        "auto_create_output_dir": True,
+                        "log_level": "WARNING"
+                    },
+                    "recommended_for": [
+                        "小文件批量制种",
+                        "快速分享需求",
+                        "网络带宽有限"
+                    ]
+                },
+                "standard": {
+                    "name": "标准模式",
+                    "description": "平衡质量和速度，适用于大多数场景(1-10GB)",
+                    "settings": {
+                        "piece_size": "auto",
+                        "max_concurrent_operations": "auto",
+                        "cache_enabled": True,
+                        "cache_size_mb": 256,
+                        "max_scan_depth": 5,
+                        "file_search_tolerance": 0.8,
+                        "auto_create_output_dir": True,
+                        "log_level": "INFO"
+                    },
+                    "recommended_for": [
+                        "日常制种需求",
+                        "中等大小文件",
+                        "平衡性能要求"
+                    ]
+                },
+                "quality": {
+                    "name": "高质量模式",
+                    "description": "适用于大文件(>10GB)，优先制种质量",
+                    "settings": {
+                        "piece_size": "2m",
+                        "max_concurrent_operations": "auto_half",
+                        "cache_enabled": True,
+                        "cache_size_mb": 512,
+                        "max_scan_depth": 10,
+                        "file_search_tolerance": 0.9,
+                        "auto_create_output_dir": True,
+                        "log_level": "DEBUG"
+                    },
+                    "recommended_for": [
+                        "大文件制种",
+                        "高质量要求",
+                        "服务器环境"
+                    ]
+                }
+            },
+            "preset_metadata": {
+                "version": "1.0",
+                "created_time": time.time(),
+                "description": "Torrent Maker 默认预设配置"
+            }
+        }
+        
+        with open(presets_path, 'w', encoding='utf-8') as f:
+            json.dump(default_presets, f, ensure_ascii=False, indent=2)
 
     def _load_settings(self) -> Dict[str, Any]:
         try:
@@ -5378,26 +5469,11 @@ class TorrentMakerApp:
         print("=" * 62)
         print()
         print(f"🎯 v{VERSION} {VERSION_NAME}更新:")
-        print("  🔄 队列管理系统（任务队列、进度监控、批量控制）")
-        print("  ⚡ 预设模式管理（内置预设、自定义预设、自动检测）")
-        print("  📋 任务状态跟踪（等待、运行、完成、失败状态管理）")
-        print("  🎛️ 高级配置界面（预设选择、队列控制、统计报告）")
-        print("  🚀 批量制种优化（并发处理、智能调度、性能监控）")
-        print()
-        print("🎯 v1.9.1 用户体验优化版更新:")
-        print("  ⏰ 新增制种时间显示功能（开始/完成时间、总耗时）")
-        print("  🧵 智能多线程检测与优化（自动检测最优线程数）")
-        print("  📊 详细性能信息展示（制种速度、效率分析）")
-        print("  🎨 用户界面优化（清晰布局和视觉提示）")
-        print("  💡 智能性能建议系统（根据系统状态优化）")
-        print()
-        print("🎯 v1.6.0 彻底重构更新:")
-        print("  🗂️ 项目结构彻底简化，移除模块化组件")
-        print("  📦 单文件架构，下载即用")
-        print("  🧹 项目体积减少 80%")
-        print("  📖 文档完全重写，专注单文件版本")
-        print("  ⚡ 安装流程简化，一键完成")
-        print("  🎨 用户体验优化，操作更直观")
+        print("  🎨 版本信息显示优化（简洁清晰的界面展示）")
+        print("  🔧 预设配置文件自动初始化（解决文件缺失问题）")
+        print("  ⚡ 队列管理参数修复（提升系统稳定性）")
+        print("  📋 程序启动流程优化（更快的响应速度）")
+        print("  🚀 用户体验持续改进（专注核心功能展示）")
         print()
 
     def display_menu(self):
@@ -6106,10 +6182,14 @@ class TorrentMakerApp:
         # 为了避免输出过多，这里暂时不输出进度信息
         pass
     
-    def _show_queue_management_interface(self):
+    def _show_queue_management_interface(self, queue_manager=None, task_ids=None):
         """显示队列管理界面入口"""
+        # 使用传入的队列管理器或默认的队列管理器
+        if queue_manager is None:
+            queue_manager = self.queue_manager
+        
         # 检查队列管理器是否可用
-        if self.queue_manager is None:
+        if queue_manager is None:
             print("❌ 队列管理功能不可用，初始化时出现错误")
             input("\n按回车键继续...")
             return
@@ -6119,7 +6199,7 @@ class TorrentMakerApp:
         print("=" * 60)
         
         # 显示队列状态
-        status = self.queue_manager.get_queue_status()
+        status = queue_manager.get_queue_status()
         self._display_queue_status(status)
         
         print("\n🔧 队列管理选项:")
@@ -6141,21 +6221,21 @@ class TorrentMakerApp:
             elif choice == '1':
                 self._show_queue_details()
             elif choice == '2':
-                self.queue_manager.start_queue()
+                queue_manager.start_queue()
                 print("🚀 队列已启动")
             elif choice == '3':
-                self.queue_manager.pause_queue()
+                queue_manager.pause_queue()
                 print("⏸️ 队列已暂停")
             elif choice == '4':
-                self.queue_manager.stop_queue()
+                queue_manager.stop_queue()
                 print("⏹️ 队列已停止")
             elif choice == '5':
-                count = self.queue_manager.clear_completed_tasks()
+                count = queue_manager.clear_completed_tasks()
                 print(f"🗑️ 已清理 {count} 个已完成任务")
             elif choice == '6':
-                self._show_detailed_statistics(self.queue_manager)
+                self._show_detailed_statistics(queue_manager)
             elif choice == '7':
-                self._export_queue_report(self.queue_manager)
+                self._export_queue_report(queue_manager)
             else:
                 print("❌ 无效选择")
         
