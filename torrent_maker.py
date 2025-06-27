@@ -167,6 +167,7 @@ logger = logging.getLogger(__name__)
 VERSION = "v2.0.1"
 VERSION_NAME = "一键安装脚本重构版"
 FULL_VERSION_INFO = f"Torrent Maker v{VERSION} - {VERSION_NAME}"
+# 触发GitHub Actions自动发布 - 2025-06-27
 
 
 # ================== 队列管理模块 ==================
